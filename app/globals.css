@@ -93,258 +93,549 @@
   }
 }
 
-/* Custom animations for landing page */
-@keyframes fade-up {
+/* ==========================================================================
+   LANDING — "Libro mayor"
+   Anclada en el papel de contabilidad de franjas (green bar paper).
+   Todo lo de esta sección lleva el prefijo .lg- y vive bajo .ledger.
+
+   Va dentro de @layer components a propósito: así las utilidades de Tailwind
+   (que se emiten en la capa posterior) pueden anular estas reglas puntualmente
+   sin pelear por especificidad.
+   ========================================================================== */
+
+@layer components {
+
+.ledger {
+  --paper: #fbfbf7;
+  --bar: #e8efe6;
+  --ink: #1a1d1a;
+  --ink-60: #5c625b;
+  --ink-40: #878d86;
+  --rule: #c3cdbf;
+  --rule-soft: #dfe5db;
+  --posted: #2f6b4f;
+  --pending: #b8873a;
+
+  --col-ref: 8.5rem;
+  --gut: 2rem;
+
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), Georgia, serif;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* El papel llega hasta el overscroll, sin que asome el tema oscuro del panel */
+html:has(.ledger) body {
+  background: #fbfbf7;
+}
+
+/* --- Roles tipográficos ------------------------------------------------- */
+
+.lg-display {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.033em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.lg-mono {
+  font-family: var(--font-ledger), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.lg-num {
+  font-family: var(--font-ledger), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* --- Retícula del libro: columna de referencia + cuerpo ----------------- */
+
+.lg-shell {
+  max-width: 74rem;
+  margin: 0 auto;
+  padding-inline: 1.5rem;
+}
+
+.lg-entry {
+  display: grid;
+  grid-template-columns: var(--col-ref) minmax(0, 1fr);
+  gap: var(--gut);
+  align-items: start;
+}
+
+.lg-entry-ref {
+  color: var(--ink-40);
+  padding-top: 0.45rem;
+}
+
+.lg-entry-body {
+  padding-top: 0.45rem;
+}
+
+/* Doble regla del asiento: trazo firme sobre la referencia, tenue sobre el
+   cuerpo. Se pide explícitamente, no viene por defecto. */
+.lg-entry--ruled > .lg-entry-ref {
+  border-top: 1px solid var(--ink);
+}
+
+.lg-entry--ruled > .lg-entry-body {
+  border-top: 1px solid var(--rule);
+}
+
+@media (max-width: 48rem) {
+  .ledger {
+    --gut: 0;
+    font-size: 1rem;
+  }
+  .lg-entry {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .lg-entry--ruled > .lg-entry-body {
+    border-top: 0;
+    padding-top: 0;
+  }
+}
+
+/* --- Franjas del papel contable -----------------------------------------
+   Las filas van envueltas en el div de animación, así que la alternancia se
+   cuenta sobre el envoltorio y el color se pinta en la fila de adentro.     */
+
+.lg-bars > *:nth-child(odd) .lg-bar-row {
+  background: var(--bar);
+}
+
+.lg-bar-row {
+  transition: background-color 0.45s ease;
+}
+
+/* --- Animación de scroll: cada bloque se "asienta" ---------------------- */
+
+.lg-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-reveal.is-posted {
+  opacity: 1;
+  transform: none;
+}
+
+/* La regla superior de cada asiento se traza de izquierda a derecha */
+.lg-ruled {
+  position: relative;
+}
+
+.lg-ruled::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-ruled.is-posted::before {
+  transform: scaleX(1);
+}
+
+/* --- Barra de saldo (firma de la página) -------------------------------- */
+
+.lg-balance {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  border-top: 1px solid var(--ink);
+  background: rgba(251, 251, 247, 0.92);
+  backdrop-filter: blur(8px);
+  transform: translateY(101%);
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-balance.is-open {
+  transform: none;
+}
+
+.lg-tick {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: var(--rule-soft);
+  overflow: hidden;
+}
+
+.lg-tick-fill {
+  display: block;
+  height: 100%;
+  background: var(--posted);
+  transform-origin: left center;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* La partida recién asentada entra desde abajo, como una línea impresa */
+@keyframes lg-post-line {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(0.6em);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
+.lg-posting {
+  animation: lg-post-line 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* --- Enlaces y foco ----------------------------------------------------- */
+
+.lg-link {
+  color: inherit;
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  transition: background-size 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-link:hover {
+  background-size: 100% 1px;
+}
+
+.ledger a:focus-visible,
+.ledger button:focus-visible {
+  outline: 2px solid var(--posted);
+  outline-offset: 3px;
+}
+
+/* --- Botones ------------------------------------------------------------ */
+
+.lg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.5rem;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.lg-btn:hover {
+  background: var(--posted);
+  border-color: var(--posted);
+}
+
+.lg-btn-ghost {
+  background: transparent;
+  color: var(--ink);
+}
+
+.lg-btn-ghost:hover {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.lg-arrow {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-btn:hover .lg-arrow {
+  transform: translateX(0.25rem);
+}
+
+/* --- Canvas de tinta (la firma) ------------------------------------------ */
+
+.lg-ink {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* --- Escena WebGL del Ávila ----------------------------------------------
+   Fija detrás de todo el documento; el contenido lleva z-index encima.      */
+
+.lg-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* --- La cordillera del Ávila ---------------------------------------------
+   Las reglas del libro se curvan hasta volverse curvas de nivel. Cada trazo
+   se dibuja de oeste a este al abrir la página.                             */
+
+.lg-ridge {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 46vh;
+  max-height: 420px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.lg-ridge-layer {
+  transition: transform 0.25s ease-out;
+  will-change: transform;
+}
+
+.lg-ridge path {
+  fill: none;
+  stroke-width: 1;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.is-opened .lg-ridge path {
+  stroke-dashoffset: 0;
+}
+
+.lg-c-low {
+  stroke: var(--rule-soft);
+}
+
+.lg-c-mid {
+  stroke: var(--rule);
+}
+
+.lg-c-high {
+  stroke: var(--posted);
+  opacity: 0.55;
+}
+
+.lg-c-ridge {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.lg-ridge-peak {
+  opacity: 0;
+  transition: opacity 0.8s ease 1.7s;
+}
+
+.is-opened .lg-ridge-peak {
+  opacity: 1;
+}
+
+.lg-ridge-peak circle {
+  fill: var(--posted);
+}
+
+.lg-ridge-label {
+  font-family: var(--font-ledger), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: var(--ink-60);
+}
+
+/* --- Apertura: el titular se compone línea por línea --------------------- */
+
+.lg-line {
+  display: block;
+  overflow: hidden;
+}
+
+.lg-line-inner {
+  display: block;
+  transform: translateY(112%);
+  transition: transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.is-opened .lg-line-inner {
+  transform: none;
+}
+
+/* --- Botones magnéticos --------------------------------------------------- */
+
+.lg-magnetic {
+  display: inline-block;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* --- Flujo vivo ----------------------------------------------------------- */
+
+.lg-flow-node {
+  border-top: 1px solid var(--ink);
+  padding-top: 0.9rem;
+  opacity: 0.3;
+  transform: translateY(8px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-flow-node.is-on {
+  opacity: 1;
+  transform: none;
+}
+
+/* estado vacío reserva su línea para que nada salte */
+.lg-flow-node .lg-mono:last-child {
+  min-height: 1.1em;
+  white-space: pre-wrap;
+}
+
+.lg-flow-line {
+  align-self: start;
+  margin-top: 2.4rem;
+  height: 1px;
+  background: var(--rule-soft);
+}
+
+.lg-flow-line-fill {
+  display: block;
+  height: 100%;
+  background: var(--posted);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-flow-line-fill.is-on {
+  transform: scaleX(1);
+}
+
+/* --- Ventana del sistema --------------------------------------------------- */
+
+.lg-window {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+.lg-window-head {
+  border-bottom: 1px solid var(--ink);
+  background: var(--bar);
+}
+
+.lg-fade-item {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lg-fade-item.is-on {
+  opacity: 1;
+  transform: none;
+}
+
+.lg-hours-bar {
+  display: block;
+  height: 3px;
+  background: var(--rule-soft);
+  overflow: hidden;
+}
+
+.lg-hours-fill {
+  display: block;
+  height: 100%;
+  background: var(--posted);
+  transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- Respeto por reduced motion ----------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-reveal,
+  .lg-ruled::before,
+  .lg-balance,
+  .lg-tick-fill,
+  .lg-link,
+  .lg-arrow,
+  .lg-line-inner,
+  .lg-magnetic,
+  .lg-flow-node,
+  .lg-flow-line-fill,
+  .lg-fade-item,
+  .lg-hours-fill {
+    transition: none;
   }
-  to {
+  .lg-reveal {
+    opacity: 1;
+    transform: none;
+  }
+  .lg-ruled::before {
+    transform: scaleX(1);
+  }
+  .lg-posting {
+    animation: none;
+  }
+  .lg-line-inner {
+    transform: none;
+  }
+  .lg-flow-node {
+    opacity: 1;
+    transform: none;
+  }
+  .lg-flow-line-fill {
+    transform: scaleX(1);
+  }
+  .lg-fade-item {
+    opacity: 1;
+    transform: none;
+  }
+  .lg-ridge path,
+  .lg-ridge-layer,
+  .lg-ridge-peak {
+    transition: none;
+  }
+  .lg-ridge path {
+    stroke-dashoffset: 0;
+  }
+  .lg-ridge-peak {
     opacity: 1;
   }
 }
 
-@keyframes slide-in-right {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
+} /* fin @layer components */
 
-.animate-fade-up {
-  animation: fade-up 0.6s ease-out forwards;
-}
-
-.animate-fade-in {
-  animation: fade-in 0.8s ease-out forwards;
-}
-
-.animate-slide-in-right {
-  animation: slide-in-right 0.6s ease-out forwards;
-}
-
-.animation-delay-100 {
-  animation-delay: 100ms;
-}
-
-.animation-delay-200 {
-  animation-delay: 200ms;
-}
-
-.animation-delay-300 {
-  animation-delay: 300ms;
-}
-
-.animation-delay-400 {
-  animation-delay: 400ms;
-}
-
-.animation-delay-500 {
-  animation-delay: 500ms;
-}
-
-/* Gradient text effect */
-.gradient-text {
-  background: linear-gradient(135deg, #ffffff 0%, #a0a0a0 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Glass effect */
-.glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Smooth scroll behavior */
-html {
+/* Las anclas del encabezado se desplazan suave, sin tapar el título */
+html:has(.ledger) {
   scroll-behavior: smooth;
 }
 
-/* Parallax floating animation */
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
+.ledger [id] {
+  scroll-margin-top: 5.5rem;
 }
 
-@keyframes glow {
-  0%, 100% {
-    opacity: 0.5;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.05);
+@media (prefers-reduced-motion: reduce) {
+  html:has(.ledger) {
+    scroll-behavior: auto;
   }
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+/* Cuando Lenis toma el scroll, el suavizado nativo debe apagarse
+   para no pelear con el suyo */
+html.lenis,
+html.lenis body {
+  height: auto;
 }
 
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(59, 130, 246, 0.5);
-  }
+html.lenis-smooth {
+  scroll-behavior: auto !important;
 }
 
-@keyframes gradient-x {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-@keyframes spin-slow {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes scale-pulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-}
-
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-.animate-glow {
-  animation: glow 4s ease-in-out infinite;
-}
-
-.animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.1) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 3s infinite;
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
-}
-
-.animate-gradient-x {
-  background-size: 200% 200%;
-  animation: gradient-x 3s ease infinite;
-}
-
-.animate-spin-slow {
-  animation: spin-slow 20s linear infinite;
-}
-
-.animate-scale-pulse {
-  animation: scale-pulse 2s ease-in-out infinite;
-}
-
-/* Hover lift effect */
-.hover-lift {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.hover-lift:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-}
-
-/* Gradient border effect */
-.gradient-border {
-  position: relative;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2));
-  border-radius: 1rem;
-}
-
-.gradient-border::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  padding: 1px;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.5), rgba(147, 51, 234, 0.5));
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
-/* Text reveal animation */
-@keyframes text-reveal {
-  0% {
-    clip-path: inset(0 100% 0 0);
-  }
-  100% {
-    clip-path: inset(0 0 0 0);
-  }
-}
-
-.animate-text-reveal {
-  animation: text-reveal 1s ease-out forwards;
-}
-
-/* Scale up on scroll */
-.scale-on-scroll {
-  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease;
-}
-
-/* Stagger children animations */
-.stagger-children > * {
-  opacity: 0;
-  transform: translateY(20px);
-  transition: opacity 0.5s ease, transform 0.5s ease;
-}
-
-.stagger-children.in-view > *:nth-child(1) { transition-delay: 0ms; }
-.stagger-children.in-view > *:nth-child(2) { transition-delay: 100ms; }
-.stagger-children.in-view > *:nth-child(3) { transition-delay: 200ms; }
-.stagger-children.in-view > *:nth-child(4) { transition-delay: 300ms; }
-.stagger-children.in-view > *:nth-child(5) { transition-delay: 400ms; }
-.stagger-children.in-view > *:nth-child(6) { transition-delay: 500ms; }
-
-.stagger-children.in-view > * {
-  opacity: 1;
-  transform: translateY(0);
+.lenis.lenis-stopped {
+  overflow: hidden;
 }
 
 /* Print styles for budget report */
@@ -352,172 +643,4 @@ html {
   .print-company-name {
     color: black !important;
   }
-}
-
-/* Enhanced scroll-triggered animations */
-@keyframes slide-up-fade {
-  from {
-    opacity: 0;
-    transform: translateY(60px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes slide-left-fade {
-  from {
-    opacity: 0;
-    transform: translateX(60px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-@keyframes slide-right-fade {
-  from {
-    opacity: 0;
-    transform: translateX(-60px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-@keyframes zoom-in {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes rotate-in {
-  from {
-    opacity: 0;
-    transform: rotate(-10deg) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: rotate(0) scale(1);
-  }
-}
-
-@keyframes blur-in {
-  from {
-    opacity: 0;
-    filter: blur(10px);
-  }
-  to {
-    opacity: 1;
-    filter: blur(0);
-  }
-}
-
-.animate-slide-up-fade {
-  animation: slide-up-fade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-slide-left-fade {
-  animation: slide-left-fade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-slide-right-fade {
-  animation: slide-right-fade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-zoom-in {
-  animation: zoom-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-rotate-in {
-  animation: rotate-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-blur-in {
-  animation: blur-in 1s ease-out forwards;
-}
-
-/* Magnetic hover effect */
-@keyframes magnetic-hover {
-  0%, 100% {
-    transform: translate(0, 0);
-  }
-  25% {
-    transform: translate(2px, -2px);
-  }
-  50% {
-    transform: translate(-2px, 2px);
-  }
-  75% {
-    transform: translate(2px, 2px);
-  }
-}
-
-.magnetic-hover:hover {
-  animation: magnetic-hover 0.5s ease-in-out;
-}
-
-/* Enhanced glow effects */
-@keyframes intense-glow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3),
-                0 0 40px rgba(147, 51, 234, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 40px rgba(59, 130, 246, 0.6),
-                0 0 80px rgba(147, 51, 234, 0.4),
-                0 0 120px rgba(59, 130, 246, 0.2);
-  }
-}
-
-.animate-intense-glow {
-  animation: intense-glow 3s ease-in-out infinite;
-}
-
-/* 3D tilt effect */
-.tilt-3d {
-  transition: transform 0.3s ease;
-  transform-style: preserve-3d;
-}
-
-.tilt-3d:hover {
-  transform: perspective(1000px) rotateX(5deg) rotateY(5deg) scale(1.02);
-}
-
-/* Ripple effect */
-@keyframes ripple {
-  0% {
-    transform: scale(0);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(4);
-    opacity: 0;
-  }
-}
-
-.ripple-effect {
-  position: relative;
-  overflow: hidden;
-}
-
-.ripple-effect::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.ripple-effect:hover::after {
-  animation: ripple 0.8s ease-out;
 }

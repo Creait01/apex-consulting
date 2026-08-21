@@ -1,873 +1,639 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
+import dynamic from "next/dynamic"
+import Lenis from "lenis"
 import { useAuth } from "@/hooks/useAuth"
 import { useRouter } from "next/navigation"
 import { useSupabaseData } from "@/hooks/useSupabaseData"
-import {
-  ArrowRight,
-  Code2,
-  Layers,
-  Zap,
-  Shield,
-  Users,
-  BarChart3,
-  ChevronRight,
-  ExternalLink,
-  Lock,
-  Sparkles,
-  Globe,
-  Rocket,
-  CheckCircle2,
-  Star,
-  ArrowUpRight,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { ArrowRight, ArrowUpRight } from "lucide-react"
+import { InkCanvas } from "@/components/landing/ink-canvas"
+import { FlowDiagram } from "@/components/landing/flow-diagram"
+import { SystemWindow } from "@/components/landing/system-window"
+import { Magnetic } from "@/components/landing/magnetic"
+import { AvilaRidge } from "@/components/landing/avila-ridge"
+import { AvilaMark } from "@/components/landing/avila-mark"
+import { PEAK_M } from "@/components/landing/avila"
 
-// Hook para detectar cuando un elemento está visible en el viewport
-function useInView(options = {}) {
+/* La escena WebGL se carga solo en el cliente y solo cuando hace falta */
+const AvilaScene = dynamic(
+  () => import("@/components/landing/avila-scene").then((m) => m.AvilaScene),
+  { ssr: false },
+)
+
+/* --------------------------------------------------------------------------
+   El documento
+   Cada sección de esta página es una partida del libro. La barra inferior
+   las asienta a medida que el lector avanza, y al final el libro cuadra.
+   -------------------------------------------------------------------------- */
+
+const ENTRIES = [
+  { id: "apertura", ref: "REF-00", label: "Apertura" },
+  { id: "partidas", ref: "REF-01", label: "Qué hago" },
+  { id: "sistema", ref: "REF-02", label: "Sistema en producción" },
+  { id: "proceso", ref: "REF-03", label: "Cómo trabajo" },
+  { id: "perfil", ref: "REF-04", label: "Quién responde" },
+  { id: "cierre", ref: "REF-05", label: "Cierre" },
+]
+
+const SERVICES = [
+  {
+    ref: "01",
+    title: "Implementación de Odoo",
+    detail:
+      "Puesta en marcha, módulos a medida y migración de datos desde el sistema que ya usás. Trabajo con entornos de prueba separados, así nada se toca en producción hasta que vos lo aprobás.",
+    tags: ["Odoo", "Python", "PostgreSQL"],
+  },
+  {
+    ref: "02",
+    title: "Sistemas de gestión a medida",
+    detail:
+      "Cuando el ERP no cubre un proceso propio, construyo la pieza que falta: aplicaciones web con su base de datos, permisos por usuario y reportes en PDF.",
+    tags: ["Next.js", "TypeScript", "Supabase"],
+  },
+  {
+    ref: "03",
+    title: "Automatización e integraciones",
+    detail:
+      "Conecto los sistemas que hoy no se hablan y elimino la carga manual repetida. Menos planillas intermedias, menos datos que se copian a mano de un lado a otro.",
+    tags: ["API REST", "Webhooks", "ETL"],
+  },
+  {
+    ref: "04",
+    title: "Acompañamiento técnico",
+    detail:
+      "Revisión de lo que ya tenés armado y decisiones de arquitectura antes de invertir. A veces el mejor entregable es decirte que no hace falta construir nada.",
+    tags: ["Auditoría", "Arquitectura", "Infraestructura"],
+  },
+]
+
+const PROCESS = [
+  {
+    n: "1",
+    title: "Entender la operación",
+    detail:
+      "Miro cómo trabajan hoy, con planillas incluidas. El proceso real casi nunca es el que está escrito en el manual.",
+  },
+  {
+    n: "2",
+    title: "Acordar el alcance por escrito",
+    detail:
+      "Un presupuesto con partidas concretas y un precio cerrado. Sabés qué entra, qué no entra y cuánto cuesta antes de que yo escriba una línea de código.",
+  },
+  {
+    n: "3",
+    title: "Entregar por partes",
+    detail:
+      "La primera parte funcionando en semanas, no en meses. Cada entrega se usa de verdad antes de seguir con la siguiente.",
+  },
+  {
+    n: "4",
+    title: "Dejarlo andando y documentado",
+    detail:
+      "Migraciones versionadas, respaldos y un traspaso ordenado. El sistema tiene que sobrevivir a que yo no esté disponible.",
+  },
+]
+
+/* --------------------------------------------------------------------------
+   Asentar bloques al entrar en viewport
+   -------------------------------------------------------------------------- */
+
+function useReveal(rootMargin = "0px 0px -12% 0px") {
   const ref = useRef<HTMLDivElement>(null)
-  const [isInView, setIsInView] = useState(false)
+  const [posted, setPosted] = useState(false)
 
   useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setIsInView(true)
-      }
-    }, { threshold: 0.1, ...options })
+    const el = ref.current
+    if (!el) return
 
-    if (ref.current) {
-      observer.observe(ref.current)
-    }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setPosted(true)
+          io.disconnect()
+        }
+      },
+      { threshold: 0.12, rootMargin },
+    )
 
-    return () => observer.disconnect()
-  }, [])
+    io.observe(el)
+    return () => io.disconnect()
+  }, [rootMargin])
 
-  return { ref, isInView }
+  return { ref, posted }
 }
 
-// Hook para efecto parallax del mouse
-function useMouseParallax() {
-  const [position, setPosition] = useState({ x: 0, y: 0 })
+function Reveal({
+  children,
+  className = "",
+  delay = 0,
+  ruled = false,
+}: {
+  children: ReactNode
+  className?: string
+  delay?: number
+  ruled?: boolean
+}) {
+  const { ref, posted } = useReveal()
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth - 0.5) * 20
-      const y = (e.clientY / window.innerHeight - 0.5) * 20
-      setPosition({ x, y })
-    }
-
-    window.addEventListener("mousemove", handleMouseMove)
-    return () => window.removeEventListener("mousemove", handleMouseMove)
-  }, [])
-
-  return position
+  return (
+    <div
+      ref={ref}
+      className={`lg-reveal ${ruled ? "lg-ruled" : ""} ${posted ? "is-posted" : ""} ${className}`}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  )
 }
 
-const services = [
-  {
-    icon: Code2,
-    title: "Desarrollo de Software",
-    description: "Soluciones tecnológicas a medida para impulsar tu negocio hacia la transformación digital.",
-    gradient: "from-blue-500 to-cyan-500",
-    bgGradient: "from-blue-600/20 to-cyan-600/20",
-  },
-  {
-    icon: Layers,
-    title: "Arquitectura de Sistemas",
-    description: "Diseño e implementación de arquitecturas escalables y robustas para empresas.",
-    gradient: "from-purple-500 to-pink-500",
-    bgGradient: "from-purple-600/20 to-pink-600/20",
-  },
-  {
-    icon: Zap,
-    title: "Optimización de Procesos",
-    description: "Automatización y mejora de procesos empresariales para maximizar la eficiencia.",
-    gradient: "from-amber-500 to-orange-500",
-    bgGradient: "from-amber-600/20 to-orange-600/20",
-  },
-  {
-    icon: Shield,
-    title: "Consultoría IT",
-    description: "Asesoramiento estratégico en tecnología para la toma de decisiones informadas.",
-    gradient: "from-emerald-500 to-teal-500",
-    bgGradient: "from-emerald-600/20 to-teal-600/20",
-  },
-]
+/* --------------------------------------------------------------------------
+   Barra de saldo — la firma de la página
+   -------------------------------------------------------------------------- */
 
-const projects = [
-  {
-    title: "Sistema de Gestión Empresarial",
-    category: "Enterprise Software",
-    description: "Plataforma integral para la gestión de operaciones, finanzas y recursos humanos.",
-    image: "/enterprise-dashboard-software-dark-theme.jpg",
-    tags: ["React", "Node.js", "PostgreSQL"],
-  },
-  {
-    title: "Portal de Servicios Digitales",
-    category: "Web Application",
-    description: "Solución web para la digitalización de servicios gubernamentales.",
-    image: "/modern-web-portal-dark-theme-government.jpg",
-    tags: ["Next.js", "TypeScript", "AWS"],
-  },
-  {
-    title: "App de Logística Inteligente",
-    category: "Mobile & Backend",
-    description: "Sistema completo de tracking y optimización de rutas en tiempo real.",
-    image: "/logistics-tracking-app-dark-theme.jpg",
-    tags: ["React Native", "Python", "ML"],
-  },
-]
+function BalanceBar({ current, open }: { current: number; open: boolean }) {
+  const entry = ENTRIES[current]
+  const total = ENTRIES.length
+  const settled = current + 1
 
-const stats = [
-  { value: "150+", label: "Proyectos Completados", icon: Rocket },
-  { value: "50+", label: "Clientes Satisfechos", icon: Users },
-  { value: "5+", label: "Años de Experiencia", icon: Star },
-  { value: "99%", label: "Tasa de Satisfacción", icon: CheckCircle2 },
-]
+  /* El scroll es un ascenso: al cierre se alcanza la cumbre del Naiguatá */
+  const altitude = Math.round((settled / total) * PEAK_M)
+  const atPeak = settled === total
 
-const testimonials = [
-  {
-    quote: "Transformaron completamente nuestra operación digital. Resultados excepcionales.",
-    author: "Carlos Mendoza",
-    role: "CEO, TechCorp",
-    rating: 5,
-  },
-  {
-    quote: "Profesionalismo y calidad en cada entrega. Altamente recomendados.",
-    author: "María García",
-    role: "CTO, InnovateLab",
-    rating: 5,
-  },
-]
+  return (
+    <div className={`lg-balance ${open ? "is-open" : ""}`} aria-hidden="true">
+      <span className="lg-tick">
+        <span className="lg-tick-fill" style={{ transform: `scaleX(${settled / total})` }} />
+      </span>
+
+      <div className="lg-shell flex items-center justify-between gap-4 py-2.5">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <span className="lg-mono shrink-0 text-[var(--ink-40)]">Último asiento</span>
+          <span key={entry.id} className="lg-posting flex min-w-0 items-baseline gap-2.5">
+            <span className="lg-mono shrink-0 text-[var(--posted)]">{entry.ref}</span>
+            <span className="truncate text-sm">{entry.label}</span>
+          </span>
+        </div>
+
+        <div className="flex shrink-0 items-baseline gap-3">
+          <span className="lg-num text-sm">
+            {String(settled).padStart(2, "0")}
+            <span className="text-[var(--ink-40)]">/{String(total).padStart(2, "0")}</span>
+          </span>
+          <span className="lg-mono hidden text-[var(--ink-40)] sm:inline">·</span>
+          <span className={`lg-num hidden text-sm sm:inline ${atPeak ? "text-[var(--posted)]" : ""}`}>
+            {altitude.toLocaleString("es-AR")} m{atPeak ? " — cumbre" : ""}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* --------------------------------------------------------------------------
+   Página
+   -------------------------------------------------------------------------- */
 
 export default function Home() {
-  const { user, loading } = useAuth()
+  const { user } = useAuth()
   const router = useRouter()
   const { companySettings } = useSupabaseData()
-  const [isScrolled, setIsScrolled] = useState(false)
-  const mousePosition = useMouseParallax()
 
-  // Hooks para animaciones de scroll
-  const statsSection = useInView()
-  const servicesSection = useInView()
-  const projectsSection = useInView()
-  const aboutSection = useInView()
-  const contactSection = useInView()
-  const testimonialsSection = useInView()
+  const [current, setCurrent] = useState(0)
+  const [barOpen, setBarOpen] = useState(false)
+  const [opened, setOpened] = useState(false)
+  const [scene3d, setScene3d] = useState(false)
 
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50)
-    }
-    window.addEventListener("scroll", handleScroll)
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
-
-  const handleAccessSystem = () => {
-    if (user) {
-      router.push("/dashboard")
-    } else {
-      router.push("/login")
-    }
-  }
-
-  // Obtener nombre de empresa y logo del sistema
   const companyName = companySettings?.company_name || "APEX CONSULTING"
   const companyLogoUrl = companySettings?.company_logo_url
 
+  // Secuencia de apertura del documento
+  useEffect(() => {
+    const t = window.setTimeout(() => setOpened(true), 80)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  // Escena 3D solo en escritorio, con WebGL y sin reduced-motion.
+  // En cualquier otro caso queda el respaldo 2D (SVG + canvas de tinta).
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    if (window.innerWidth < 1024) return
+    try {
+      const c = document.createElement("canvas")
+      if (c.getContext("webgl2") || c.getContext("webgl")) setScene3d(true)
+    } catch {
+      /* sin WebGL: respaldo 2D */
+    }
+  }, [])
+
+  // Scroll con inercia (Lenis). Los anchors compensan el encabezado fijo.
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    if (window.matchMedia("(pointer: coarse)").matches) return
+
+    const lenis = new Lenis({ duration: 1.1, anchors: { offset: -80 } })
+    let rafId = 0
+    const raf = (time: number) => {
+      lenis.raf(time)
+      rafId = requestAnimationFrame(raf)
+    }
+    rafId = requestAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(rafId)
+      lenis.destroy()
+    }
+  }, [])
+
+  // Qué partida se está asentando
+  useEffect(() => {
+    const sections = ENTRIES.map((e) => document.getElementById(e.id)).filter(
+      (el): el is HTMLElement => el !== null,
+    )
+    if (!sections.length) return
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
+
+        if (!visible) return
+        const index = ENTRIES.findIndex((e) => e.id === visible.target.id)
+        if (index >= 0) setCurrent(index)
+      },
+      { rootMargin: "-45% 0px -45% 0px" },
+    )
+
+    sections.forEach((s) => io.observe(s))
+    return () => io.disconnect()
+  }, [])
+
+  // La barra aparece recién cuando el lector deja la apertura
+  useEffect(() => {
+    const onScroll = () => setBarOpen(window.scrollY > window.innerHeight * 0.55)
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  const handleAccessSystem = () => {
+    router.push(user ? "/dashboard" : "/login")
+  }
+
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white overflow-x-hidden">
-      {/* Animated background elements */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div 
-          className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[150px] animate-pulse"
-          style={{ 
-            transform: `translate(${mousePosition.x * 2}px, ${mousePosition.y * 2}px)` 
-          }}
-        />
-        <div 
-          className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[150px] animate-pulse"
-          style={{ 
-            transform: `translate(${mousePosition.x * -1.5}px, ${mousePosition.y * -1.5}px)`,
-            animationDelay: "1s"
-          }}
-        />
-        <div 
-          className="absolute top-3/4 left-1/2 w-[400px] h-[400px] bg-cyan-600/8 rounded-full blur-[120px]"
-          style={{ 
-            transform: `translate(${mousePosition.x * 1}px, ${mousePosition.y * 1}px)` 
-          }}
-        />
-      </div>
+    <div className={`ledger min-h-screen ${opened ? "is-opened" : ""}`}>
+      {/* El Ávila en 3D, fijo detrás de todo el documento */}
+      {scene3d && <AvilaScene />}
 
-      {/* Floating particles */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        {[...Array(20)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-1 h-1 bg-white/20 rounded-full animate-float"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${5 + Math.random() * 10}s`,
-            }}
-          />
-        ))}
-      </div>
+      {/* ---------------------------------------------------------------- */}
+      {/* Encabezado del libro                                             */}
+      {/* ---------------------------------------------------------------- */}
+      <header className="sticky top-0 z-30 border-b border-[var(--rule)] bg-[rgba(251,251,247,0.9)] backdrop-blur-sm">
+        <div className="lg-shell flex items-center justify-between gap-6 py-4">
+          <a href="#apertura" className="flex items-center gap-3">
+            {companyLogoUrl ? (
+              <img src={companyLogoUrl} alt="" className="h-8 w-8 object-contain" />
+            ) : (
+              <AvilaMark className="h-8 w-9" />
+            )}
+            <span className="lg-mono text-[var(--ink)]">{companyName}</span>
+          </a>
 
-      {/* Navigation */}
-      <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-          isScrolled 
-            ? "bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/5 shadow-2xl shadow-black/20" 
-            : "bg-transparent"
-        }`}
-      >
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 group cursor-pointer">
-              {companyLogoUrl ? (
-                <div className="w-11 h-11 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/10 flex items-center justify-center group-hover:scale-110 group-hover:border-blue-500/50 transition-all duration-300 shadow-lg">
-                  <img 
-                    src={companyLogoUrl} 
-                    alt="Logo" 
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement
-                      target.style.display = 'none'
-                    }}
-                  />
+          <nav className="hidden items-center gap-7 md:flex">
+            {ENTRIES.slice(1, 5).map((entry) => (
+              <a key={entry.id} href={`#${entry.id}`} className="lg-mono lg-link text-[var(--ink-60)]">
+                {entry.label}
+              </a>
+            ))}
+          </nav>
+
+          <button onClick={handleAccessSystem} className="lg-mono lg-btn lg-btn-ghost px-4 py-2">
+            {user ? "Ir al panel" : "Acceso"}
+          </button>
+        </div>
+      </header>
+
+      <main className="relative z-[1]">
+        {/* -------------------------------------------------------------- */}
+        {/* REF-00 · Asiento de apertura                                   */}
+        {/* -------------------------------------------------------------- */}
+        <section id="apertura">
+          {/* La banda del Ávila. Con 3D activo, la cordillera vive en la
+              escena fija; si no, el respaldo 2D dibuja este mismo perfil. */}
+          <div className="relative flex min-h-[92svh] flex-col overflow-hidden">
+            {!scene3d && <InkCanvas />}
+            {!scene3d && <AvilaRidge />}
+
+            <div className="lg-shell relative z-[1] w-full pb-[38vh] pt-14 md:pt-20">
+            <div
+              className="lg-reveal"
+              style={{ opacity: opened ? 1 : 0, transform: opened ? "none" : "translateY(16px)" }}
+            >
+              <div className="lg-entry lg-entry--ruled">
+                <p className="lg-entry-ref lg-mono">REF-00</p>
+                <div className="lg-entry-body">
+                  <p className="lg-mono text-[var(--ink-40)]">Edwin Rodriguez · Desarrollador independiente</p>
                 </div>
-              ) : (
-                <div className="w-11 h-11 bg-gradient-to-br from-white to-gray-200 rounded-xl flex items-center justify-center group-hover:scale-110 transition-all duration-300 shadow-lg shadow-white/10">
-                  <span className="text-black font-bold text-xl">A</span>
-                </div>
-              )}
-              <div className="flex flex-col">
-                <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                  {companyName}
+              </div>
+            </div>
+
+            <h1 className="lg-display mt-12 text-[clamp(2.6rem,7.2vw,6rem)]">
+              <span className="lg-line">
+                <span className="lg-line-inner" style={{ transitionDelay: "140ms" }}>
+                  Construyo los sistemas
                 </span>
-                <span className="text-[10px] text-gray-500 uppercase tracking-[0.2em]">Technology Solutions</span>
-              </div>
-            </div>
-
-            <div className="hidden md:flex items-center gap-1">
-              {[
-                { href: "#servicios", label: "Servicios" },
-                { href: "#proyectos", label: "Proyectos" },
-                { href: "#nosotros", label: "Nosotros" },
-                { href: "#contacto", label: "Contacto" },
-              ].map((item) => (
-                <a 
-                  key={item.href}
-                  href={item.href} 
-                  className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-all duration-300 relative group"
-                >
-                  {item.label}
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 group-hover:w-3/4 transition-all duration-300" />
-                </a>
-              ))}
-            </div>
-
-            <Button 
-              onClick={handleAccessSystem} 
-              className="bg-white text-black hover:bg-gray-100 rounded-full px-6 font-medium shadow-lg shadow-white/10 hover:shadow-white/20 hover:scale-105 transition-all duration-300"
-            >
-              {user ? "Ir al Dashboard" : "Acceso Interno"}
-              <Lock className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Animated grid background */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:100px_100px] [mask-image:radial-gradient(ellipse_50%_50%_at_50%_50%,black_40%,transparent_100%)]" />
-        
-        {/* Main gradient orb */}
-        <div 
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-gradient-to-r from-blue-600/20 via-purple-600/15 to-cyan-600/20 rounded-full blur-[120px] animate-glow"
-          style={{ 
-            transform: `translate(calc(-50% + ${mousePosition.x * 3}px), calc(-50% + ${mousePosition.y * 3}px))` 
-          }}
-        />
-
-        <div className="relative z-10 max-w-6xl mx-auto px-6 text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-white/10 backdrop-blur-sm mb-10 animate-fade-up hover:border-white/20 transition-colors group cursor-default">
-            <div className="relative">
-              <div className="w-2.5 h-2.5 bg-green-500 rounded-full" />
-              <div className="absolute inset-0 w-2.5 h-2.5 bg-green-500 rounded-full animate-ping" />
-            </div>
-            <span className="text-sm text-gray-300 font-medium">Desarrollador Freelance con 5+ años de experiencia</span>
-            <Sparkles className="h-4 w-4 text-yellow-500 group-hover:rotate-12 transition-transform" />
-          </div>
-
-          {/* Main heading */}
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-8 animate-blur-in">
-            <span className="block mb-2 animate-slide-up-fade">Soluciones</span>
-            <span className="block relative animate-zoom-in animation-delay-200">
-              <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent animate-gradient-x">
-                Tecnológicas
               </span>
-            </span>
-            <span className="block mt-2 text-4xl md:text-5xl lg:text-6xl text-gray-400 font-normal animate-slide-up-fade animation-delay-300">de Alto Impacto</span>
-          </h1>
+              <span className="lg-line">
+                <span className="lg-line-inner" style={{ transitionDelay: "260ms" }}>
+                  que una empresa usa
+                </span>
+              </span>
+              <span className="lg-line">
+                <span className="lg-line-inner text-[var(--posted)]" style={{ transitionDelay: "380ms" }}>
+                  todos los días.
+                </span>
+              </span>
+            </h1>
 
-          {/* Subtitle */}
-          <p className="text-lg md:text-xl lg:text-2xl text-gray-400 max-w-3xl mx-auto mb-12 animate-fade-up animation-delay-200 leading-relaxed">
-            Impulso la <span className="text-white font-medium">transformación digital</span> de tu empresa con 
-            soluciones <span className="text-blue-400">innovadoras</span> y desarrollo 
-            <span className="text-purple-400"> especializado</span>.
-          </p>
-
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-up animation-delay-300">
-            <Button
-              size="lg"
-              className="group bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full px-10 py-7 text-lg font-medium shadow-2xl shadow-blue-600/25 hover:shadow-blue-600/60 hover:scale-110 transition-all duration-500 border-0 ripple-effect animate-intense-glow"
-              onClick={() => document.getElementById("contacto")?.scrollIntoView({ behavior: "smooth" })}
+            <div
+              className="mt-12 max-w-[46ch] md:ml-[calc(var(--col-ref)+var(--gut))]"
+              style={{
+                opacity: opened ? 1 : 0,
+                transform: opened ? "none" : "translateY(18px)",
+                transition:
+                  "opacity 1s cubic-bezier(0.16,1,0.3,1) 480ms, transform 1s cubic-bezier(0.16,1,0.3,1) 480ms",
+              }}
             >
-              Iniciar Proyecto
-              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-2 transition-transform duration-300" />
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="group rounded-full px-10 py-7 text-lg border-white/20 text-white hover:bg-white/10 bg-white/5 backdrop-blur-sm hover:border-white/30 transition-all duration-300"
-              onClick={() => document.getElementById("proyectos")?.scrollIntoView({ behavior: "smooth" })}
-            >
-              Ver Proyectos
-              <ArrowUpRight className="ml-2 h-5 w-5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-            </Button>
-          </div>
+              <p className="text-lg text-[var(--ink-60)] md:text-xl">
+                Implemento Odoo y desarrollo software de gestión a medida. Trabajo solo, así que hablás siempre con la
+                persona que escribe el código.
+              </p>
 
-          {/* Trust badges */}
-          <div className="mt-16 flex flex-wrap items-center justify-center gap-8 animate-fade-up animation-delay-400">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Globe className="h-4 w-4" />
-              <span className="text-sm">+15 países</span>
-            </div>
-            <div className="w-px h-4 bg-gray-700" />
-            <div className="flex items-center gap-2 text-gray-500">
-              <Shield className="h-4 w-4" />
-              <span className="text-sm">ISO 27001</span>
-            </div>
-            <div className="w-px h-4 bg-gray-700" />
-            <div className="flex items-center gap-2 text-gray-500">
-              <Zap className="h-4 w-4" />
-              <span className="text-sm">Soporte 24/7</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Scroll indicator */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2">
-          <div className="flex flex-col items-center gap-2 animate-bounce">
-            <span className="text-xs text-gray-500 uppercase tracking-widest">Scroll</span>
-            <div className="w-6 h-10 border-2 border-white/20 rounded-full flex items-start justify-center p-2">
-              <div className="w-1.5 h-3 bg-gradient-to-b from-white to-transparent rounded-full animate-pulse" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section 
-        ref={statsSection.ref}
-        className="py-24 border-y border-white/5 overflow-hidden relative"
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 via-transparent to-purple-600/5" />
-        <div className="max-w-7xl mx-auto px-6 relative">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat, index) => (
-              <div 
-                key={index} 
-                className={`text-center group transition-all duration-700 hover:scale-110 magnetic-hover ${
-                  statsSection.isInView 
-                    ? 'opacity-100 translate-y-0' 
-                    : 'opacity-0 translate-y-10'
-                }`}
-                style={{ transitionDelay: `${index * 100}ms` }}
-              >
-                <div className="relative inline-block mb-4">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-2xl blur-2xl group-hover:blur-3xl group-hover:scale-150 transition-all duration-500" />
-                  <div className="relative p-4 rounded-2xl bg-white/5 border border-white/10 group-hover:border-white/30 group-hover:scale-125 transition-all duration-500 animate-intense-glow">
-                    <stat.icon className="h-6 w-6 text-blue-400 group-hover:text-blue-300 transition-colors" />
-                  </div>
-                </div>
-                <div className="text-4xl md:text-5xl font-bold mb-2 bg-gradient-to-r from-white via-blue-200 to-purple-200 bg-clip-text text-transparent">
-                  {stat.value}
-                </div>
-                <div className="text-sm text-gray-500 font-medium">{stat.label}</div>
+              <div className="mt-9 flex flex-wrap items-center gap-3">
+                <Magnetic>
+                  <a href="#cierre" className="lg-mono lg-btn">
+                    Conversemos
+                    <ArrowRight className="lg-arrow h-3.5 w-3.5" strokeWidth={2} />
+                  </a>
+                </Magnetic>
+                <Magnetic>
+                  <a href="#sistema" className="lg-mono lg-btn lg-btn-ghost">
+                    Ver un sistema real
+                  </a>
+                </Magnetic>
               </div>
+            </div>
+
+            </div>
+          </div>
+
+          {/* La tesis: el ciclo real del sistema, operando frente al lector */}
+          <div className="lg-shell pb-24 pt-16 md:pb-32 md:pt-20">
+            <div className="border-t border-[var(--ink)] pt-5">
+              <p className="lg-mono mb-8 text-[var(--ink-40)]">
+                Un ciclo administrativo completo, sin planillas sueltas
+              </p>
+              <FlowDiagram />
+            </div>
+          </div>
+        </section>
+
+        {/* -------------------------------------------------------------- */}
+        {/* REF-01 · Partidas                                              */}
+        {/* -------------------------------------------------------------- */}
+        <section id="partidas" className="lg-shell py-24 md:py-36">
+          <Reveal ruled className="pt-5">
+            <div className="lg-entry">
+              <p className="lg-mono text-[var(--ink-40)] pt-1">REF-01</p>
+              <div>
+                <h2 className="lg-display max-w-[18ch] text-[clamp(1.9rem,4.2vw,3.1rem)]">
+                  Cuatro partidas, sin letra chica
+                </h2>
+              </div>
+            </div>
+          </Reveal>
+
+          <div className="lg-bars mt-14">
+            {SERVICES.map((service, i) => (
+              <Reveal key={service.ref} delay={i * 80}>
+                <article className="lg-bar-row lg-entry border-t border-[var(--rule)] px-3 py-8 md:px-5 md:py-10">
+                  <p className="lg-mono pt-1 text-[var(--ink-40)]">{service.ref}</p>
+                  <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-10">
+                    <div>
+                      <h3 className="lg-display text-2xl md:text-[1.75rem]">{service.title}</h3>
+                      <p className="lg-mono mt-3 text-[var(--ink-40)]">{service.tags.join(" · ")}</p>
+                    </div>
+                    <p className="text-[var(--ink-60)]">{service.detail}</p>
+                  </div>
+                </article>
+              </Reveal>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Services Section */}
-      <section 
-        id="servicios" 
-        ref={servicesSection.ref}
-        className="py-32 overflow-hidden relative"
-      >
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[150px]" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[150px]" />
-        
-        <div className="max-w-7xl mx-auto px-6 relative">
-          <div 
-            className={`text-center mb-20 transition-all duration-700 ${
-              servicesSection.isInView 
-                ? 'opacity-100 translate-y-0' 
-                : 'opacity-0 translate-y-10'
-            }`}
-          >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600/10 border border-blue-500/20 mb-6">
-              <Sparkles className="h-4 w-4 text-blue-400" />
-              <span className="text-sm text-blue-400 font-medium">Lo que hacemos</span>
+        {/* -------------------------------------------------------------- */}
+        {/* REF-02 · Sistema en producción                                 */}
+        {/* -------------------------------------------------------------- */}
+        <section id="sistema" className="lg-shell py-24 md:py-36">
+          <Reveal ruled className="pt-5">
+            <div className="lg-entry">
+              <p className="lg-mono text-[var(--ink-40)] pt-1">REF-02</p>
+              <div>
+                <h2 className="lg-display max-w-[20ch] text-[clamp(1.9rem,4.2vw,3.1rem)]">
+                  El sistema que estás mirando ahora
+                </h2>
+                <p className="mt-6 max-w-[54ch] text-lg text-[var(--ink-60)]">
+                  Este sitio es la puerta de entrada de un sistema de administración que uso todos los días para
+                  facturar mi propio trabajo. No es una maqueta: hay datos reales del otro lado del botón de acceso.
+                </p>
+              </div>
             </div>
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              Nuestros <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Servicios</span>
-            </h2>
-            <p className="text-gray-400 max-w-2xl mx-auto text-lg">
-              Ofrecemos soluciones integrales adaptadas a las necesidades específicas de cada cliente.
+          </Reveal>
+
+          <Reveal delay={120}>
+            <div className="lg-entry mt-14">
+              <p className="lg-mono hidden text-[var(--ink-40)] md:block">Alcance</p>
+              <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)] lg:gap-14">
+                <dl>
+                  {[
+                    {
+                      t: "Presupuestos y facturas",
+                      d: "Numeración correlativa, partidas por ítem y salida en PDF lista para el cliente.",
+                    },
+                    {
+                      t: "Pagos parciales",
+                      d: "Un presupuesto puede cobrarse en varias veces. El sistema calcula el saldo y marca los vencidos.",
+                    },
+                    {
+                      t: "Control de horas",
+                      d: "Horas cotizadas contra horas consumidas por cliente, para saber cuándo un proyecto se pasó de largo.",
+                    },
+                    {
+                      t: "Estado de cuenta",
+                      d: "Deuda por cliente con el detalle de lo vencido, para reclamar sin discutir números.",
+                    },
+                  ].map((item, i) => (
+                    <div key={item.t} className={`py-6 ${i > 0 ? "border-t border-[var(--rule)]" : "pt-0"}`}>
+                      <dt className="lg-display text-lg">{item.t}</dt>
+                      <dd className="mt-2 text-[0.98rem] text-[var(--ink-60)]">{item.d}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                {/* El producto, operándose solo */}
+                <SystemWindow />
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={180}>
+            <div className="lg-entry mt-10">
+              <p className="lg-mono hidden text-[var(--ink-40)] md:block">Construido con</p>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                {["Next.js", "TypeScript", "PostgreSQL", "Supabase", "Tailwind CSS", "Railway"].map((tech) => (
+                  <span key={tech} className="lg-mono text-[var(--ink-60)]">
+                    {tech}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+        </section>
+
+        {/* -------------------------------------------------------------- */}
+        {/* REF-03 · Proceso — acá la numeración sí es una secuencia real   */}
+        {/* -------------------------------------------------------------- */}
+        <section id="proceso" className="lg-shell py-24 md:py-36">
+          <Reveal ruled className="pt-5">
+            <div className="lg-entry">
+              <p className="lg-mono text-[var(--ink-40)] pt-1">REF-03</p>
+              <div>
+                <h2 className="lg-display max-w-[18ch] text-[clamp(1.9rem,4.2vw,3.1rem)]">
+                  Cómo trabajo, en orden
+                </h2>
+              </div>
+            </div>
+          </Reveal>
+
+          <ol className="mt-14">
+            {PROCESS.map((step, i) => (
+              <Reveal key={step.n} delay={i * 90}>
+                <li className="lg-entry border-t border-[var(--rule)] py-8 md:py-10">
+                  <p className="lg-num pt-1 text-[var(--ink-40)] text-sm">
+                    Paso {step.n}
+                    <span className="text-[var(--rule)]"> / {PROCESS.length}</span>
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:gap-10">
+                    <h3 className="lg-display text-2xl md:text-[1.75rem]">{step.title}</h3>
+                    <p className="text-[var(--ink-60)]">{step.detail}</p>
+                  </div>
+                </li>
+              </Reveal>
+            ))}
+          </ol>
+        </section>
+
+        {/* -------------------------------------------------------------- */}
+        {/* REF-04 · Perfil                                                */}
+        {/* -------------------------------------------------------------- */}
+        <section id="perfil" className="lg-shell py-24 md:py-36">
+          <Reveal ruled className="pt-5">
+            <div className="lg-entry">
+              <p className="lg-mono text-[var(--ink-40)] pt-1">REF-04</p>
+              <div>
+                <h2 className="lg-display max-w-[16ch] text-[clamp(1.9rem,4.2vw,3.1rem)]">Quién responde</h2>
+
+                <div className="mt-8 max-w-[58ch] space-y-5 text-lg text-[var(--ink-60)]">
+                  <p>
+                    Soy <span className="text-[var(--ink)]">Edwin Rodriguez</span>. Llevo más de cinco años construyendo
+                    software de gestión y trabajando sobre Odoo para empresas que necesitan que sus números cierren.
+                  </p>
+                  <p>
+                    Trabajo solo y por eso soy selectivo con los proyectos que tomo. La ventaja es directa: no hay
+                    cuenta de por medio, no hay teléfono descompuesto, y quien te explica una decisión técnica es el
+                    mismo que la implementó.
+                  </p>
+                  <p>
+                    Si lo que necesitás se resuelve configurando algo que ya existe, te lo digo. Cobro por resolver el
+                    problema, no por escribir código.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </section>
+
+        {/* -------------------------------------------------------------- */}
+        {/* REF-05 · Cierre — el libro cuadra                              */}
+        {/* -------------------------------------------------------------- */}
+        <section id="cierre" className="lg-shell py-24 md:py-36">
+          <Reveal ruled className="pt-5">
+            <div className="lg-entry">
+              <p className="lg-mono text-[var(--ink-40)] pt-1">REF-05</p>
+              <div>
+                <h2 className="lg-display max-w-[16ch] text-[clamp(2.1rem,5vw,3.8rem)]">
+                  Contame qué proceso te está costando.
+                </h2>
+                <p className="mt-7 max-w-[48ch] text-lg text-[var(--ink-60)]">
+                  Una conversación de treinta minutos suele alcanzar para saber si tiene sentido trabajar juntos. Si no
+                  lo tiene, te lo digo ahí mismo.
+                </p>
+
+                <div className="mt-10 flex flex-wrap items-center gap-3">
+                  <Magnetic>
+                    <a
+                      href="mailto:Edwin.dev.21114@gmail.com?subject=Consulta%20sobre%20un%20proyecto"
+                      className="lg-mono lg-btn"
+                    >
+                      Edwin.dev.21114@gmail.com
+                      <ArrowUpRight className="lg-arrow h-3.5 w-3.5" strokeWidth={2} />
+                    </a>
+                  </Magnetic>
+                </div>
+
+                {/* El cuadre */}
+                <div className="mt-20 border-t border-[var(--ink)] pt-5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-4">
+                    <p className="lg-mono text-[var(--ink-40)]">Cierre del documento</p>
+                    <p className="lg-mono text-[var(--posted)]">
+                      Partidas asentadas {String(ENTRIES.length).padStart(2, "0")} · El libro cuadra
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </section>
+      </main>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Pie                                                              */}
+      {/* ---------------------------------------------------------------- */}
+      <footer className="relative z-[1] border-t border-[var(--rule)] pb-24 pt-12">
+        <div className="lg-shell flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <AvilaMark className="h-5 w-6" />
+              <p className="lg-mono">{companyName}</p>
+            </div>
+            <p className="mt-1.5 text-sm text-[var(--ink-40)]">
+              Sistemas de gestión a medida e implementación de Odoo.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {services.map((service, index) => (
-              <div
-                key={index}
-                className={`group relative p-8 rounded-3xl bg-gradient-to-br ${service.bgGradient} border border-white/10 hover:border-white/30 transition-all duration-500 hover:scale-[1.05] hover:-translate-y-3 hover:shadow-2xl hover:shadow-blue-500/20 tilt-3d ripple-effect ${
-                  servicesSection.isInView 
-                    ? 'opacity-100 translate-y-0' 
-                    : 'opacity-0 translate-y-16'
-                }`}
-                style={{ transitionDelay: `${index * 100 + 200}ms` }}
-              >
-                {/* Glow effect on hover */}
-                <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${service.bgGradient} opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-500 animate-intense-glow`} />
-                
-                <div className="relative">
-                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${service.gradient} flex items-center justify-center mb-6 group-hover:scale-125 group-hover:rotate-6 transition-all duration-500 shadow-lg group-hover:shadow-2xl`}>
-                    <service.icon className="h-7 w-7 text-white" />
-                  </div>
-                  <h3 className="text-xl font-bold mb-3 text-white">{service.title}</h3>
-                  <p className="text-gray-400 leading-relaxed">{service.description}</p>
-                  
-                  <div className="mt-6 flex items-center gap-2 text-sm text-gray-500 group-hover:text-white transition-colors">
-                    <span>Saber más</span>
-                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Projects Section */}
-      <section 
-        id="proyectos" 
-        ref={projectsSection.ref}
-        className="py-32 bg-gradient-to-b from-white/[0.02] to-transparent overflow-hidden relative"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.05),transparent_70%)]" />
-        
-        <div className="max-w-7xl mx-auto px-6 relative">
-          <div 
-            className={`flex flex-col md:flex-row md:items-end md:justify-between mb-16 transition-all duration-700 ${
-              projectsSection.isInView 
-                ? 'opacity-100 translate-y-0' 
-                : 'opacity-0 translate-y-10'
-            }`}
-          >
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-600/10 border border-purple-500/20 mb-6">
-                <Rocket className="h-4 w-4 text-purple-400" />
-                <span className="text-sm text-purple-400 font-medium">Portfolio</span>
-              </div>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
-                Proyectos <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Destacados</span>
-              </h2>
-              <p className="text-gray-400 max-w-xl text-lg">
-                Una selección de nuestros trabajos más recientes que demuestran nuestra capacidad de entrega.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {projects.map((project, index) => (
-              <div
-                key={index}
-                className={`group relative rounded-3xl overflow-hidden bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 hover:border-white/30 transition-all duration-700 hover:scale-[1.05] hover:-translate-y-4 hover:shadow-2xl hover:shadow-purple-500/20 tilt-3d ${
-                  projectsSection.isInView 
-                    ? 'opacity-100 translate-y-0' 
-                    : 'opacity-0 translate-y-20'
-                }`}
-                style={{ transitionDelay: `${index * 150 + 200}ms` }}
-              >
-                {/* Image container with overlay */}
-                <div className="aspect-[4/3] overflow-hidden relative">
-                  <img
-                    src={project.image || "/placeholder.svg"}
-                    alt={project.title}
-                    className="w-full h-full object-cover group-hover:scale-125 group-hover:rotate-2 transition-all duration-1000"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f] via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-500" />
-                  
-                  {/* Floating tags */}
-                  <div className="absolute top-4 left-4 flex flex-wrap gap-2">
-                    {project.tags?.map((tag, tagIndex) => (
-                      <span 
-                        key={tagIndex}
-                        className="px-3 py-1 text-xs font-medium bg-black/50 backdrop-blur-sm rounded-full border border-white/10 text-white"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="p-6">
-                  <div className="text-xs text-purple-400 font-semibold mb-2 uppercase tracking-wider">{project.category}</div>
-                  <h3 className="text-xl font-bold mb-3 group-hover:text-blue-400 transition-colors">{project.title}</h3>
-                  <p className="text-gray-400 mb-6 leading-relaxed">{project.description}</p>
-                  <Button variant="ghost" size="sm" className="text-white/60 hover:text-white p-0 group/btn">
-                    Ver caso de estudio
-                    <ExternalLink className="ml-2 h-4 w-4 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-                  </Button>
-                </div>
-                
-                {/* Hover glow effect */}
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-purple-600/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none animate-intense-glow" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* About Section */}
-      <section 
-        id="nosotros" 
-        ref={aboutSection.ref}
-        className="py-32 overflow-hidden relative"
-      >
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-l from-blue-600/10 to-transparent rounded-full blur-[150px]" />
-        
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid lg:grid-cols-2 gap-20 items-center">
-            <div 
-              className={`transition-all duration-1000 ${
-                aboutSection.isInView 
-                  ? 'opacity-100 translate-x-0' 
-                  : 'opacity-0 -translate-x-20'
-              }`}
-            >
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-600/10 border border-emerald-500/20 mb-6">
-                <Users className="h-4 w-4 text-emerald-400" />
-                <span className="text-sm text-emerald-400 font-medium">Sobre nosotros</span>
-              </div>
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-8 leading-tight">
-                Compromiso con la{" "}
-                <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                  excelencia
-                </span>
-              </h2>
-              <p className="text-gray-400 mb-8 text-lg leading-relaxed">
-                Como desarrollador independiente, combino <span className="text-white font-semibold">5+ años de experiencia técnica</span> con visión estratégica para ofrecer soluciones que
-                realmente transforman negocios. Trabajo de la mano con cada cliente
-                para entender sus desafíos y diseñar la mejor ruta hacia el éxito digital.
-              </p>
-              
-              <div className="grid grid-cols-2 gap-6">
-                <div 
-                  className={`group p-6 rounded-2xl bg-gradient-to-br from-blue-600/10 to-purple-600/10 border border-white/10 hover:border-white/20 transition-all duration-500 ${
-                    aboutSection.isInView 
-                      ? 'opacity-100 translate-y-0' 
-                      : 'opacity-0 translate-y-10'
-                  }`}
-                  style={{ transitionDelay: '300ms' }}
-                >
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    <Users className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="font-bold text-lg mb-1">Desarrollador Experto</div>
-                  <div className="text-sm text-gray-500">5+ años de experiencia</div>
-                </div>
-                <div 
-                  className={`group p-6 rounded-2xl bg-gradient-to-br from-emerald-600/10 to-cyan-600/10 border border-white/10 hover:border-white/20 transition-all duration-500 ${
-                    aboutSection.isInView 
-                      ? 'opacity-100 translate-y-0' 
-                      : 'opacity-0 translate-y-10'
-                  }`}
-                  style={{ transitionDelay: '450ms' }}
-                >
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    <BarChart3 className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="font-bold text-lg mb-1">Resultados Medibles</div>
-                  <div className="text-sm text-gray-500">ROI garantizado</div>
-                </div>
-              </div>
-            </div>
-            
-            <div 
-              className={`relative transition-all duration-1000 ${
-                aboutSection.isInView 
-                  ? 'opacity-100 translate-x-0 scale-100' 
-                  : 'opacity-0 translate-x-20 scale-95'
-              }`}
-              style={{ transitionDelay: '200ms' }}
-            >
-              {/* Decorative elements */}
-              <div className="absolute -top-8 -left-8 w-32 h-32 bg-gradient-to-br from-blue-600/30 to-purple-600/30 rounded-3xl blur-2xl" />
-              <div className="absolute -bottom-8 -right-8 w-40 h-40 bg-gradient-to-br from-emerald-600/30 to-cyan-600/30 rounded-3xl blur-2xl animate-pulse" />
-              
-              <div className="relative aspect-square rounded-3xl overflow-hidden group border border-white/10">
-                <img 
-                  src="/modern-office-team-meeting-dark-professional.jpg" 
-                  alt="Equipo" 
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f]/80 via-transparent to-transparent" />
-                
-                {/* Floating card */}
-                <div className="absolute bottom-6 left-6 right-6 p-6 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20">
-                  <div className="flex items-center gap-4">
-                    <div className="flex -space-x-3">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 border-2 border-[#0a0a0f] flex items-center justify-center text-xs font-bold">
-                          {String.fromCharCode(64 + i)}
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <div className="font-bold">Desarrollador Full Stack</div>
-                      <div className="text-sm text-gray-400">5+ años de experiencia</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials Section */}
-      <section 
-        ref={testimonialsSection.ref}
-        className="py-24 bg-gradient-to-b from-transparent via-white/[0.02] to-transparent overflow-hidden"
-      >
-        <div className="max-w-7xl mx-auto px-6">
-          <div 
-            className={`text-center mb-16 transition-all duration-700 ${
-              testimonialsSection.isInView 
-                ? 'opacity-100 translate-y-0' 
-                : 'opacity-0 translate-y-10'
-            }`}
-          >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-600/10 border border-amber-500/20 mb-6">
-              <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-              <span className="text-sm text-amber-400 font-medium">Testimonios</span>
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold">Lo que dicen nuestros clientes</h2>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <div
-                key={index}
-                className={`p-8 rounded-3xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 hover:border-white/20 transition-all duration-500 ${
-                  testimonialsSection.isInView 
-                    ? 'opacity-100 translate-y-0' 
-                    : 'opacity-0 translate-y-10'
-                }`}
-                style={{ transitionDelay: `${index * 150}ms` }}
-              >
-                <div className="flex gap-1 mb-6">
-                  {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 text-amber-400 fill-amber-400" />
-                  ))}
-                </div>
-                <p className="text-xl mb-6 leading-relaxed text-gray-300">"{testimonial.quote}"</p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center font-bold">
-                    {testimonial.author.charAt(0)}
-                  </div>
-                  <div>
-                    <div className="font-semibold">{testimonial.author}</div>
-                    <div className="text-sm text-gray-500">{testimonial.role}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Contact Section */}
-      <section 
-        id="contacto" 
-        ref={contactSection.ref}
-        className="py-32 relative overflow-hidden"
-      >
-        {/* Background effects */}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-600/5 to-transparent" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-cyan-600/10 rounded-full blur-[150px]" />
-        
-        <div 
-          className={`max-w-4xl mx-auto px-6 text-center relative transition-all duration-1000 ${
-            contactSection.isInView 
-              ? 'opacity-100 translate-y-0 scale-100' 
-              : 'opacity-0 translate-y-16 scale-95'
-          }`}
-        >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600/10 border border-blue-500/20 mb-8">
-            <Sparkles className="h-4 w-4 text-blue-400" />
-            <span className="text-sm text-blue-400 font-medium">Contáctanos</span>
-          </div>
-          
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-            ¿Listo para{" "}
-            <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-              transformar
-            </span>{" "}
-            tu negocio?
-          </h2>
-          <p className="text-gray-400 mb-12 text-lg max-w-2xl mx-auto">
-            Contáctanos hoy y descubre cómo podemos ayudarte a alcanzar tus objetivos tecnológicos con soluciones a medida.
-          </p>
-          
-          <div 
-            className={`flex flex-col sm:flex-row gap-4 justify-center transition-all duration-700 ${
-              contactSection.isInView 
-                ? 'opacity-100 translate-y-0' 
-                : 'opacity-0 translate-y-10'
-            }`}
-            style={{ transitionDelay: '300ms' }}
-          >
-            <Button 
-              size="lg" 
-              className="group bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-full px-10 py-7 text-lg font-medium shadow-2xl shadow-blue-600/25 hover:shadow-blue-600/40 hover:scale-105 transition-all duration-300 border-0"
-              onClick={() => {
-                const email = 'Edwin.dev.21114@gmail.com'
-                const title = encodeURIComponent('Reunión de Consultoría - APEX CONSULTING')
-                const details = encodeURIComponent('Reunión para discutir proyecto de desarrollo de software')
-                window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&add=${email}`, '_blank')
-              }}
-            >
-              Agendar Reunión
-              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="rounded-full px-10 py-7 text-lg border-white/20 text-white hover:bg-white/10 bg-white/5 backdrop-blur-sm hover:scale-105 transition-all duration-300"
-              onClick={() => window.location.href = 'mailto:Edwin.dev.21114@gmail.com'}
-            >
-              Edwin.dev.21114@gmail.com
-            </Button>
-          </div>
-
-          {/* Trust badges */}
-          <div className="mt-16 pt-16 border-t border-white/5">
-            <p className="text-sm text-gray-500 mb-6">Confían en nosotros</p>
-            <div className="flex flex-wrap items-center justify-center gap-12 opacity-50">
-              {["TechCorp", "InnovateLab", "DataFlow", "CloudSync", "NextGen"].map((company, i) => (
-                <span key={i} className="text-lg font-bold text-gray-600">{company}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-16 border-t border-white/5 bg-[#050508]">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid md:grid-cols-4 gap-12 mb-12">
-            {/* Brand column */}
-            <div className="md:col-span-2">
-              <div className="flex items-center gap-3 mb-6">
-                {companyLogoUrl ? (
-                  <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/10 flex items-center justify-center">
-                    <img 
-                      src={companyLogoUrl} 
-                      alt="Logo" 
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-10 h-10 bg-gradient-to-br from-white to-gray-200 rounded-xl flex items-center justify-center">
-                    <span className="text-black font-bold text-lg">A</span>
-                  </div>
-                )}
-                <span className="text-xl font-bold">{companyName}</span>
-              </div>
-              <p className="text-gray-500 max-w-sm mb-6">
-                Transformando empresas a través de soluciones tecnológicas innovadoras con 5+ años de experiencia.
-              </p>
-              <div className="flex gap-4">
-                {["LinkedIn", "Twitter", "GitHub"].map((social, i) => (
-                  <a 
-                    key={i}
-                    href="#" 
-                    className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gray-500 hover:text-white hover:border-white/20 hover:bg-white/10 transition-all"
-                  >
-                    <span className="text-xs font-medium">{social.charAt(0)}</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-
-            {/* Links columns */}
-            <div>
-              <h4 className="font-semibold mb-4 text-white">Servicios</h4>
-              <ul className="space-y-3 text-gray-500">
-                {services.map((service, i) => (
-                  <li key={i}>
-                    <a href="#servicios" className="hover:text-white transition-colors">{service.title}</a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-4 text-white">Empresa</h4>
-              <ul className="space-y-3 text-gray-500">
-                <li><a href="#nosotros" className="hover:text-white transition-colors">Sobre Nosotros</a></li>
-                <li><a href="#proyectos" className="hover:text-white transition-colors">Proyectos</a></li>
-                <li><a href="#contacto" className="hover:text-white transition-colors">Contacto</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Carreras</a></li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Bottom bar */}
-          <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-6 text-sm text-gray-500">
-              <a href="#" className="hover:text-white transition-colors">Privacidad</a>
-              <a href="#" className="hover:text-white transition-colors">Términos</a>
-              <span>© 2025 {companyName}</span>
-            </div>
-
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleAccessSystem} 
-              className="text-gray-500 hover:text-white group"
-            >
-              <Lock className="mr-2 h-4 w-4" />
-              {user ? "Dashboard" : "Acceso Interno"}
-              <ArrowRight className="ml-2 h-3 w-3 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-            </Button>
+          <div className="flex items-center gap-6">
+            <a href="mailto:Edwin.dev.21114@gmail.com" className="lg-mono lg-link text-[var(--ink-60)]">
+              Correo
+            </a>
+            <button onClick={handleAccessSystem} className="lg-mono lg-link text-[var(--ink-60)]">
+              {user ? "Panel" : "Acceso interno"}
+            </button>
+            <span className="lg-mono text-[var(--ink-40)]">© {new Date().getFullYear()}</span>
           </div>
         </div>
       </footer>
+
+      <BalanceBar current={current} open={barOpen} />
     </div>
   )
 }
