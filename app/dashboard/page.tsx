@@ -41,6 +41,16 @@ import { DashboardCards } from "@/components/dashboard-cards"
 import { DebtReport } from "@/components/debt-report"
 import { AddHoursDialog } from "@/components/add-hours-dialog"
 import { RegisterPaymentDialog } from "@/components/register-payment-dialog"
+import {
+  budgetDiscount,
+  budgetSubtotal,
+  budgetTotal,
+  hasAnyDiscount,
+  itemDiscount,
+  itemDiscountPercent,
+  itemNet,
+  money,
+} from "@/lib/budget-math"
 
 interface Budget {
   id: string
@@ -379,7 +389,10 @@ export default function DashboardPage() {
     }
 
     const budgetItems = budget.items || []
-    const totalBudget = budgetItems.reduce((sum: number, item: any) => sum + (item.quantity * item.rate), 0)
+    const subtotalBudget = budgetSubtotal(budgetItems)
+    const discountBudget = budgetDiscount(budgetItems)
+    const totalBudget = budgetTotal(budgetItems)
+    const showDiscounts = hasAnyDiscount(budgetItems)
 
     const printHTML = `
 <!DOCTYPE html>
@@ -851,36 +864,62 @@ export default function DashboardPage() {
       <table class="items-table">
         <thead>
           <tr>
-            <th style="width: 8%">#</th>
-            <th style="width: 42%">DESCRIPCIÓN</th>
-            <th style="width: 18%">PRECIO</th>
-            <th style="width: 12%">CANTIDAD</th>
-            <th style="width: 20%">TOTAL</th>
+            <th style="width: 6%">#</th>
+            <th style="width: ${showDiscounts ? '31%' : '37%'}">DESCRIPCIÓN</th>
+            <th style="width: 15%">PRECIO</th>
+            <th style="width: 9%">CANTIDAD</th>
+            <th style="width: 12%">UNIDAD</th>
+            ${showDiscounts ? '<th style="width: 13%">DESCUENTO</th>' : ''}
+            <th style="width: ${showDiscounts ? '14%' : '21%'}">TOTAL</th>
           </tr>
         </thead>
         <tbody>
-          ${budgetItems.length === 0 
-            ? `<tr><td colspan="5" style="text-align: center; color: #999; padding: 40px;">No hay ítems en el presupuesto</td></tr>`
-            : budgetItems.map((item: any, index: number) => `
+          ${budgetItems.length === 0
+            ? `<tr><td colspan="${showDiscounts ? 7 : 6}" style="text-align: center; color: #999; padding: 40px;">No hay ítems en el presupuesto</td></tr>`
+            : budgetItems.map((item: any, index: number) => {
+              const discount = itemDiscount(item)
+              return `
               <tr>
                 <td>${index + 1}</td>
                 <td class="item-description">${item.description}</td>
-                <td>$${Number(item.rate).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td>$${money(Number(item.rate))}</td>
                 <td>${item.quantity}</td>
-                <td>$${(item.quantity * item.rate).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td>${item.unit || '—'}</td>
+                ${showDiscounts
+                  ? `<td style="color: ${discount > 0 ? '#b91c1c' : '#9ca3af'};">${
+                      discount > 0
+                        ? `−$${money(discount)}${
+                            item.discount_type === 'percent'
+                              ? ` <span style="font-size:11px;">(${money(itemDiscountPercent(item))}%)</span>`
+                              : ''
+                          }`
+                        : '—'
+                    }</td>`
+                  : ''}
+                <td>$${money(itemNet(item))}</td>
               </tr>
-            `).join('')
+            `}).join('')
           }
         </tbody>
       </table>
     </div>
-    
+
     <!-- Totals Section -->
     <div class="totals-section">
       <table class="totals-table">
+        ${showDiscounts ? `
+        <tr>
+          <td class="label-cell">SUBTOTAL</td>
+          <td class="value-cell">$${money(subtotalBudget)}</td>
+        </tr>
+        <tr>
+          <td class="label-cell" style="color: #b91c1c;">DESCUENTO</td>
+          <td class="value-cell" style="color: #b91c1c;">−$${money(discountBudget)}</td>
+        </tr>
+        ` : ''}
         <tr class="total-row">
           <td class="label-cell">TOTAL</td>
-          <td class="value-cell">$${totalBudget.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+          <td class="value-cell">$${money(totalBudget)}</td>
         </tr>
       </table>
     </div>

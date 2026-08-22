@@ -34,6 +34,14 @@ import {
   Cell,
   Legend,
 } from "recharts"
+import {
+  budgetDiscount,
+  budgetSubtotal,
+  budgetTotal,
+  hasAnyDiscount,
+  itemDiscount,
+  itemNet,
+} from "@/lib/budget-math"
 
 interface Budget {
   id: string
@@ -101,16 +109,55 @@ export function DebtReport({
   getPaymentsByBudget,
 }: DebtReportProps) {
   const [selectedClient, setSelectedClient] = useState<string | null>(null)
-  const [overdueIds, setOverdueIds] = useState<Set<string>>(new Set())
 
-  const toggleOverdue = (id: string) => {
-    setOverdueIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+  /* Vencidos por monto, no por presupuesto entero: de un presupuesto puede
+     estar vencida solo la inicial impaga. La clave es el id del presupuesto
+     y el valor, el monto vencido de su saldo. */
+  const [overdueAmounts, setOverdueAmounts] = useState<Map<string, number>>(new Map())
+
+  const pendingOf = (budget: Budget) => Number(budget.total) - Number(budget.paid_amount || 0)
+
+  /** Monto vencido efectivo. Nunca supera el saldo pendiente actual: si entra
+      un pago después de marcarlo, lo vencido se recorta solo. */
+  const overdueOf = (budget: Budget) => {
+    const marked = overdueAmounts.get(budget.id)
+    if (marked === undefined) return 0
+    return Math.min(Math.max(marked, 0), pendingOf(budget))
+  }
+
+  const isOverdue = (budget: Budget) => overdueAmounts.has(budget.id)
+
+  const overduePercentOf = (budget: Budget) => {
+    const pending = pendingOf(budget)
+    if (pending <= 0) return 0
+    return Math.round((overdueOf(budget) / pending) * 100)
+  }
+
+  const setOverdueAmount = (budget: Budget, amount: number) => {
+    setOverdueAmounts((prev) => {
+      const next = new Map(prev)
+      next.set(budget.id, Math.min(Math.max(amount, 0), pendingOf(budget)))
       return next
     })
   }
+
+  const setOverduePercent = (budget: Budget, percent: number) => {
+    const safe = Math.min(Math.max(percent, 0), 100)
+    setOverdueAmount(budget, (pendingOf(budget) * safe) / 100)
+  }
+
+  /** Al marcar, vence el saldo completo; desde ahí se ajusta el porcentaje. */
+  const toggleOverdue = (budget: Budget) => {
+    setOverdueAmounts((prev) => {
+      const next = new Map(prev)
+      if (next.has(budget.id)) next.delete(budget.id)
+      else next.set(budget.id, pendingOf(budget))
+      return next
+    })
+  }
+
+  const money = (n: number) =>
+    n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const calculateClientDebts = (): ClientDebt[] => {
     const clientMap = new Map<string, ClientDebt>()
@@ -250,11 +297,8 @@ export function DebtReport({
     let content = ""
 
     if (client) {
-      const overdueList = client.budgets.filter((b) => overdueIds.has(b.id))
-      const overdueTotal = overdueList.reduce(
-        (sum, b) => sum + (Number(b.total) - Number(b.paid_amount || 0)),
-        0,
-      )
+      const overdueList = client.budgets.filter((b) => overdueOf(b) > 0)
+      const overdueTotal = client.budgets.reduce((sum, b) => sum + overdueOf(b), 0)
       const notOverdueTotal = client.pendingDebt - overdueTotal
 
       content = `
@@ -288,6 +332,7 @@ export function DebtReport({
               <th style="text-align: right;">Total</th>
               <th style="text-align: right;">Pagado</th>
               <th style="text-align: right;">Pendiente</th>
+              <th style="text-align: right;">Vencido</th>
               <th>Estado</th>
             </tr>
           </thead>
@@ -297,15 +342,19 @@ export function DebtReport({
                 const paidAmount = Number(budget.paid_amount || 0)
                 const totalAmount = Number(budget.total)
                 const pendingAmount = totalAmount - paidAmount
+                const overdueAmount = overdueOf(budget)
 
                 return `
               <tr>
                 <td>#${budget.number}</td>
                 <td>${budget.project_name}</td>
                 <td>${new Date(budget.date).toLocaleDateString("es-ES")}</td>
-                <td style="text-align: right;">$${totalAmount.toLocaleString()}</td>
-                <td style="text-align: right; color: #10b981;">$${paidAmount.toLocaleString()}</td>
-                <td style="text-align: right; color: #f97316; font-weight: 600;">$${pendingAmount.toLocaleString()}</td>
+                <td style="text-align: right;">$${money(totalAmount)}</td>
+                <td style="text-align: right; color: #10b981;">$${money(paidAmount)}</td>
+                <td style="text-align: right; color: #f97316; font-weight: 600;">$${money(pendingAmount)}</td>
+                <td style="text-align: right; color: ${overdueAmount > 0 ? "#dc2626" : "#9ca3af"}; font-weight: ${overdueAmount > 0 ? "600" : "400"};">${
+                  overdueAmount > 0 ? `$${money(overdueAmount)}` : "—"
+                }</td>
                 <td>
                   <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start;">
                     <span style="display:inline-block;padding:4px 12px;border-radius:9999px;font-size:11px;font-weight:600;letter-spacing:0.3px;white-space:nowrap; ${
@@ -317,11 +366,15 @@ export function DebtReport({
                     }">
                       ${paidAmount >= totalAmount ? "Pagado" : paidAmount > 0 ? "Parcial" : "Sin pagar"}
                     </span>
-                    ${
-                      overdueIds.has(budget.id)
-                        ? '<span style="display:inline-block;padding:4px 12px;border-radius:9999px;font-size:11px;font-weight:600;letter-spacing:0.3px;white-space:nowrap;background-color:#fff1f2;color:#be123c;border:1px solid #fecdd3;">Vencido</span>'
-                        : ""
-                    }
+                    ${(() => {
+                      const overdueAmount = overdueOf(budget)
+                      if (overdueAmount <= 0) return ""
+                      const partial = overdueAmount < pendingAmount
+                      const label = partial
+                        ? `Vencido $${money(overdueAmount)} (${overduePercentOf(budget)}%)`
+                        : "Vencido"
+                      return `<span style="display:inline-block;padding:4px 12px;border-radius:9999px;font-size:11px;font-weight:600;letter-spacing:0.3px;white-space:nowrap;background-color:#fff1f2;color:#be123c;border:1px solid #fecdd3;">${label}</span>`
+                    })()}
                   </div>
                 </td>
               </tr>
@@ -332,9 +385,10 @@ export function DebtReport({
           <tfoot>
             <tr style="background-color: #f3f4f6; font-weight: bold; border-top: 3px solid #3b82f6;">
               <td colspan="3" style="text-align: right; padding: 14px 12px;">TOTALES:</td>
-              <td style="text-align: right; color: #1e40af; font-size: 15px;">$${client.totalBudgets.toLocaleString()}</td>
-              <td style="text-align: right; color: #10b981; font-size: 15px;">$${client.totalPaid.toLocaleString()}</td>
-              <td style="text-align: right; color: ${client.pendingDebt > 0 ? "#f97316" : "#10b981"}; font-size: 15px;">$${client.pendingDebt.toLocaleString()}</td>
+              <td style="text-align: right; color: #1e40af; font-size: 15px;">$${money(client.totalBudgets)}</td>
+              <td style="text-align: right; color: #10b981; font-size: 15px;">$${money(client.totalPaid)}</td>
+              <td style="text-align: right; color: ${client.pendingDebt > 0 ? "#f97316" : "#10b981"}; font-size: 15px;">$${money(client.pendingDebt)}</td>
+              <td style="text-align: right; color: #dc2626; font-size: 15px;">$${money(overdueTotal)}</td>
               <td></td>
             </tr>
           </tfoot>
@@ -343,12 +397,12 @@ export function DebtReport({
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:20px 0;">
           <div style="background:#fef2f2;border:2px solid #fecaca;border-radius:8px;padding:16px;text-align:center;">
             <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:500;">Saldo Pendiente Vencido</div>
-            <div style="font-size:24px;font-weight:bold;color:#dc2626;">$${overdueTotal.toLocaleString()}</div>
-            <div style="font-size:12px;color:#9ca3af;margin-top:4px;">${overdueList.length} presupuesto(s) vencido(s)</div>
+            <div style="font-size:24px;font-weight:bold;color:#dc2626;">$${money(overdueTotal)}</div>
+            <div style="font-size:12px;color:#9ca3af;margin-top:4px;">${overdueList.length} presupuesto(s) con saldo vencido</div>
           </div>
           <div style="background:#fffbeb;border:2px solid #fde68a;border-radius:8px;padding:16px;text-align:center;">
             <div style="font-size:13px;color:#6b7280;margin-bottom:6px;font-weight:500;">Saldo Pendiente por Vencer</div>
-            <div style="font-size:24px;font-weight:bold;color:#d97706;">$${notOverdueTotal.toLocaleString()}</div>
+            <div style="font-size:24px;font-weight:bold;color:#d97706;">$${money(notOverdueTotal)}</div>
             <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Resto del saldo pendiente</div>
           </div>
         </div>
@@ -435,23 +489,38 @@ export function DebtReport({
           overdueList
             .map((b) => {
               const items = (b.items || []) as any[]
-              const totalB = items.reduce((s, it) => s + Number(it.quantity) * Number(it.rate), 0)
+              const subtotalB = budgetSubtotal(items)
+              const discountB = budgetDiscount(items)
+              const totalB = budgetTotal(items)
+              const showDiscounts = hasAnyDiscount(items)
               const issued = new Date(b.date)
               const due = new Date(issued.getTime() + 7 * 24 * 60 * 60 * 1000)
+              const overdueAmount = overdueOf(b)
+              const isPartial = overdueAmount < pendingOf(b)
+              const colCount = showDiscounts ? 7 : 6
               const rows =
                 items.length === 0
-                  ? '<tr><td colspan="5" style="text-align:center;color:#999;padding:24px;">Sin ítems</td></tr>'
+                  ? `<tr><td colspan="${colCount}" style="text-align:center;color:#999;padding:24px;">Sin ítems</td></tr>`
                   : items
-                      .map(
-                        (it, i) => `
+                      .map((it, i) => {
+                        const dis = itemDiscount(it)
+                        return `
                 <tr>
                   <td style="text-align:center;font-weight:700;">${i + 1}</td>
                   <td>${it.description ?? ""}</td>
                   <td style="text-align:right;">$${fmtMoney(it.rate)}</td>
                   <td style="text-align:center;">${it.quantity}</td>
-                  <td style="text-align:right;font-weight:600;">$${fmtMoney(Number(it.quantity) * Number(it.rate))}</td>
-                </tr>`,
-                      )
+                  <td style="text-align:center;color:#6b7280;">${it.unit || "—"}</td>
+                  ${
+                    showDiscounts
+                      ? `<td style="text-align:right;color:${dis > 0 ? "#b91c1c" : "#9ca3af"};">${
+                          dis > 0 ? `−$${fmtMoney(dis)}` : "—"
+                        }</td>`
+                      : ""
+                  }
+                  <td style="text-align:right;font-weight:600;">$${fmtMoney(itemNet(it))}</td>
+                </tr>`
+                      })
                       .join("")
               return `
         <div style="page-break-inside: avoid; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; margin-bottom:24px;">
@@ -464,7 +533,9 @@ export function DebtReport({
             <div style="text-align:right;font-size:12px;color:#666;">
               <div><strong style="color:#1a1a1a;">Fecha:</strong> ${fmtDate(issued)}</div>
               <div><strong style="color:#1a1a1a;">Vencimiento:</strong> ${fmtDate(due)}</div>
-              <div style="display:inline-block;margin-top:6px;padding:3px 10px;border:2px solid #dc2626;color:#dc2626;font-weight:700;font-size:11px;border-radius:6px;">VENCIDO</div>
+              <div style="display:inline-block;margin-top:6px;padding:3px 10px;border:2px solid #dc2626;color:#dc2626;font-weight:700;font-size:11px;border-radius:6px;">${
+                isPartial ? `VENCIDO PARCIAL · ${overduePercentOf(b)}%` : "VENCIDO"
+              }</div>
             </div>
           </div>
           ${
@@ -480,14 +551,34 @@ export function DebtReport({
                   <th>Descripción</th>
                   <th style="text-align:right;">Precio</th>
                   <th style="text-align:center;">Cantidad</th>
+                  <th style="text-align:center;">Unidad</th>
+                  ${showDiscounts ? '<th style="text-align:right;">Descuento</th>' : ""}
                   <th style="text-align:right;">Total</th>
                 </tr>
               </thead>
               <tbody>${rows}</tbody>
               <tfoot>
+                ${
+                  showDiscounts
+                    ? `<tr style="font-weight:600;">
+                  <td colspan="${colCount - 1}" style="text-align:right;padding:8px 12px;color:#6b7280;">Subtotal:</td>
+                  <td style="text-align:right;color:#6b7280;">$${fmtMoney(subtotalB)}</td>
+                </tr>
+                <tr style="font-weight:600;">
+                  <td colspan="${colCount - 1}" style="text-align:right;padding:8px 12px;color:#b91c1c;">Descuento:</td>
+                  <td style="text-align:right;color:#b91c1c;">−$${fmtMoney(discountB)}</td>
+                </tr>`
+                    : ""
+                }
                 <tr style="background-color:#f3f4f6;font-weight:bold;border-top:3px solid #3b82f6;">
-                  <td colspan="4" style="text-align:right;padding:12px;">TOTAL:</td>
+                  <td colspan="${colCount - 1}" style="text-align:right;padding:12px;">TOTAL:</td>
                   <td style="text-align:right;color:#1e40af;font-size:15px;">$${fmtMoney(totalB)}</td>
+                </tr>
+                <tr style="background-color:#fef2f2;font-weight:bold;">
+                  <td colspan="${colCount - 1}" style="text-align:right;padding:12px;color:#b91c1c;">MONTO VENCIDO${
+                    isPartial ? ` (${overduePercentOf(b)}% del saldo)` : ""
+                  }:</td>
+                  <td style="text-align:right;color:#dc2626;font-size:15px;">$${fmtMoney(overdueAmount)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -831,12 +922,11 @@ export function DebtReport({
   }
 
   if (selectedClientData) {
-    const overdueBudgets = selectedClientData.budgets.filter((b) => overdueIds.has(b.id))
-    const overdueTotal = overdueBudgets.reduce(
-      (sum, b) => sum + (Number(b.total) - Number(b.paid_amount || 0)),
-      0,
-    )
+    const overdueBudgets = selectedClientData.budgets.filter((b) => overdueOf(b) > 0)
+    const overdueTotal = selectedClientData.budgets.reduce((sum, b) => sum + overdueOf(b), 0)
     const notOverdueTotal = selectedClientData.pendingDebt - overdueTotal
+    /* Vencido parcial: el presupuesto tiene saldo marcado, pero no todo */
+    const partialCount = overdueBudgets.filter((b) => overdueOf(b) < pendingOf(b)).length
 
     return (
       <div className="space-y-6">
@@ -890,14 +980,15 @@ export function DebtReport({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div className="bg-red-500/10 rounded-lg p-4 border-l-4 border-l-red-500">
                 <div className="text-sm text-gray-400 mb-1">Saldo Pendiente Vencido</div>
-                <div className="text-2xl font-bold text-red-400">${overdueTotal.toLocaleString()}</div>
+                <div className="text-2xl font-bold text-red-400">${money(overdueTotal)}</div>
                 <div className="text-xs text-gray-500 mt-1">
-                  {overdueBudgets.length} presupuesto(s) marcado(s) como vencido
+                  {overdueBudgets.length} presupuesto(s) con saldo vencido
+                  {partialCount > 0 && ` · ${partialCount} por monto parcial`}
                 </div>
               </div>
               <div className="bg-yellow-500/10 rounded-lg p-4 border-l-4 border-l-yellow-500">
                 <div className="text-sm text-gray-400 mb-1">Saldo Pendiente por Vencer</div>
-                <div className="text-2xl font-bold text-yellow-400">${notOverdueTotal.toLocaleString()}</div>
+                <div className="text-2xl font-bold text-yellow-400">${money(notOverdueTotal)}</div>
                 <div className="text-xs text-gray-500 mt-1">Resto del saldo pendiente</div>
               </div>
             </div>
@@ -956,14 +1047,63 @@ export function DebtReport({
                               <Badge className="bg-red-500/20 text-red-300 border border-red-500/30">Sin pagar</Badge>
                             )}
                           </TableCell>
-                          <TableCell className="text-center">
-                            <input
-                              type="checkbox"
-                              checked={overdueIds.has(budget.id)}
-                              onChange={() => toggleOverdue(budget.id)}
-                              className="h-4 w-4 accent-red-500 cursor-pointer"
-                              title="Marcar como vencido"
-                            />
+                          <TableCell className="text-center align-top">
+                            <div className="flex flex-col items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isOverdue(budget)}
+                                onChange={() => toggleOverdue(budget)}
+                                className="h-4 w-4 accent-red-500 cursor-pointer"
+                                title="Marcar saldo vencido"
+                                aria-label={`Marcar saldo vencido de ${budget.number}`}
+                              />
+
+                              {isOverdue(budget) && (
+                                <div className="flex flex-col items-center gap-1.5">
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={1}
+                                      value={overduePercentOf(budget)}
+                                      onChange={(e) => setOverduePercent(budget, Number(e.target.value))}
+                                      className="w-14 rounded border border-white/20 bg-white/10 px-1.5 py-1 text-center text-xs text-white outline-none focus:border-red-400"
+                                      aria-label="Porcentaje vencido"
+                                    />
+                                    <span className="text-xs text-gray-400">%</span>
+                                  </div>
+
+                                  <div className="flex gap-1">
+                                    {[25, 50, 100].map((preset) => (
+                                      <button
+                                        key={preset}
+                                        type="button"
+                                        onClick={() => setOverduePercent(budget, preset)}
+                                        className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+                                          overduePercentOf(budget) === preset
+                                            ? "bg-red-500/30 text-red-200"
+                                            : "bg-white/10 text-gray-400 hover:bg-white/20"
+                                        }`}
+                                      >
+                                        {preset}%
+                                      </button>
+                                    ))}
+                                  </div>
+
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={pendingAmount}
+                                    step="0.01"
+                                    value={Number(overdueOf(budget).toFixed(2))}
+                                    onChange={(e) => setOverdueAmount(budget, Number(e.target.value))}
+                                    className="w-24 rounded border border-white/20 bg-white/10 px-1.5 py-1 text-right font-mono text-xs text-red-300 outline-none focus:border-red-400"
+                                    aria-label="Monto vencido"
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-center gap-1">

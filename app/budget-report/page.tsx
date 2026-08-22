@@ -30,6 +30,18 @@ import { useBudgetStorage } from "@/hooks/useBudgetStorage"
 import { useAuth } from "@/hooks/useAuth"
 import { useRouter } from "next/navigation"
 import { useSupabaseData } from "@/hooks/useSupabaseData"
+import {
+  type DiscountType,
+  budgetDiscount,
+  budgetSubtotal,
+  budgetTotal,
+  hasAnyDiscount,
+  itemDiscount,
+  itemDiscountPercent,
+  itemGross,
+  itemNet,
+  money,
+} from "@/lib/budget-math"
 
 interface BudgetItem {
   id: string
@@ -38,6 +50,9 @@ interface BudgetItem {
   quantity: number
   rate: number
   unit: string
+  /* Descuento por ítem. Opcionales: los presupuestos anteriores no los traen. */
+  discount_type?: DiscountType
+  discount_value?: number
 }
 
 interface SavedBudget {
@@ -131,12 +146,22 @@ export default function InteractiveBudgetReport() {
     quantity: 0,
     rate: 0,
     unit: "",
+    discount_type: "percent",
+    discount_value: 0,
   })
 
   const handleAddItem = () => {
     if (newItem.description && newItem.quantity > 0 && newItem.rate > 0) {
       setBudgetItems([...budgetItems, { ...newItem, id: crypto.randomUUID() }])
-      setNewItem({ category: "", description: "", quantity: 0, rate: 0, unit: "" })
+      setNewItem({
+        category: "",
+        description: "",
+        quantity: 0,
+        rate: 0,
+        unit: "",
+        discount_type: "percent",
+        discount_value: 0,
+      })
     } else {
       alert("Por favor, completa todos los campos del nuevo ítem y asegúrate que cantidad y tarifa sean mayores a 0.")
     }
@@ -146,7 +171,15 @@ export default function InteractiveBudgetReport() {
     setBudgetItems(budgetItems.filter((item) => item.id !== id))
   }
 
-  const totalBudget = budgetItems.reduce((sum, item) => sum + item.quantity * item.rate, 0)
+  /** Cambia el descuento de un ítem ya cargado. */
+  const handleItemDiscount = (id: string, patch: Partial<Pick<BudgetItem, "discount_type" | "discount_value">>) => {
+    setBudgetItems((items) => items.map((item) => (item.id === id ? { ...item, ...patch } : item)))
+  }
+
+  const subtotalBudget = budgetSubtotal(budgetItems)
+  const discountBudget = budgetDiscount(budgetItems)
+  const totalBudget = budgetTotal(budgetItems)
+  const showDiscounts = hasAnyDiscount(budgetItems)
 
   const handlePrint = () => {
     const printWindow = window.open("", "_blank")
@@ -649,36 +682,62 @@ export default function InteractiveBudgetReport() {
       <table class="items-table">
         <thead>
           <tr>
-            <th style="width: 8%">#</th>
-            <th style="width: 42%">DESCRIPCIÓN</th>
-            <th style="width: 18%">PRECIO</th>
-            <th style="width: 12%">CANTIDAD</th>
-            <th style="width: 20%">TOTAL</th>
+            <th style="width: 6%">#</th>
+            <th style="width: ${showDiscounts ? '31%' : '37%'}">DESCRIPCIÓN</th>
+            <th style="width: 15%">PRECIO</th>
+            <th style="width: 9%">CANTIDAD</th>
+            <th style="width: 12%">UNIDAD</th>
+            ${showDiscounts ? '<th style="width: 13%">DESCUENTO</th>' : ''}
+            <th style="width: ${showDiscounts ? '14%' : '21%'}">TOTAL</th>
           </tr>
         </thead>
         <tbody>
-          ${budgetItems.length === 0 
-            ? `<tr><td colspan="5" style="text-align: center; color: #999; padding: 40px;">No hay ítems en el presupuesto</td></tr>`
-            : budgetItems.map((item: { description: string; quantity: number; rate: number; unit?: string }, index: number) => `
+          ${budgetItems.length === 0
+            ? `<tr><td colspan="${showDiscounts ? 7 : 6}" style="text-align: center; color: #999; padding: 40px;">No hay ítems en el presupuesto</td></tr>`
+            : budgetItems.map((item: BudgetItem, index: number) => {
+              const discount = itemDiscount(item)
+              return `
               <tr>
                 <td>${index + 1}</td>
                 <td class="item-description">${item.description}</td>
-                <td>$${Number(item.rate).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td>$${money(Number(item.rate))}</td>
                 <td>${item.quantity}</td>
-                <td>$${(item.quantity * item.rate).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                <td>${item.unit || '—'}</td>
+                ${showDiscounts
+                  ? `<td style="color: ${discount > 0 ? '#b91c1c' : '#9ca3af'};">${
+                      discount > 0
+                        ? `−$${money(discount)}${
+                            item.discount_type === 'percent'
+                              ? ` <span style="font-size:11px;">(${money(itemDiscountPercent(item))}%)</span>`
+                              : ''
+                          }`
+                        : '—'
+                    }</td>`
+                  : ''}
+                <td>$${money(itemNet(item))}</td>
               </tr>
-            `).join('')
+            `}).join('')
           }
         </tbody>
       </table>
     </div>
-    
+
     <!-- Totals Section -->
     <div class="totals-section">
       <table class="totals-table">
+        ${showDiscounts ? `
+        <tr>
+          <td class="label-cell">SUBTOTAL</td>
+          <td class="value-cell">$${money(subtotalBudget)}</td>
+        </tr>
+        <tr>
+          <td class="label-cell" style="color: #b91c1c;">DESCUENTO</td>
+          <td class="value-cell" style="color: #b91c1c;">−$${money(discountBudget)}</td>
+        </tr>
+        ` : ''}
         <tr class="total-row">
           <td class="label-cell">TOTAL</td>
-          <td class="value-cell">$${totalBudget.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+          <td class="value-cell">$${money(totalBudget)}</td>
         </tr>
       </table>
     </div>
@@ -1183,7 +1242,7 @@ export default function InteractiveBudgetReport() {
                 min="0"
               />
             </div>
-            <div className="space-y-2 col-span-full">
+            <div className="space-y-2">
               <Label htmlFor="newItemUnit">Unidad</Label>
               <Input
                 id="newItemUnit"
@@ -1191,6 +1250,37 @@ export default function InteractiveBudgetReport() {
                 onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
                 placeholder="Ej: horas, meses, proyecto"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="newItemDiscount">Descuento</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="newItemDiscount"
+                  type="number"
+                  min="0"
+                  step={newItem.discount_type === "amount" ? "0.01" : "1"}
+                  value={newItem.discount_value ?? 0}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, discount_value: Number.parseFloat(e.target.value) || 0 })
+                  }
+                  placeholder="0"
+                />
+                <select
+                  value={newItem.discount_type ?? "percent"}
+                  onChange={(e) => setNewItem({ ...newItem, discount_type: e.target.value as DiscountType })}
+                  className="rounded-md border border-white/20 bg-white/10 px-3 text-sm text-white outline-none focus:border-green-400"
+                  aria-label="Tipo de descuento del nuevo ítem"
+                >
+                  <option value="percent" className="bg-gray-900">%</option>
+                  <option value="amount" className="bg-gray-900">$</option>
+                </select>
+              </div>
+              {(newItem.discount_value ?? 0) > 0 && newItem.quantity > 0 && newItem.rate > 0 && (
+                <p className="text-xs text-gray-400">
+                  Queda en <span className="font-mono text-white">${money(itemNet(newItem))}</span>
+                  <span className="text-red-400"> (−${money(itemDiscount(newItem))})</span>
+                </p>
+              )}
             </div>
           </div>
           <Button onClick={handleAddItem} className="w-full">
@@ -1269,7 +1359,9 @@ export default function InteractiveBudgetReport() {
                   <TableHead className="w-[150px] text-gray-300">Categoría</TableHead>
                   <TableHead className="text-gray-300">Descripción</TableHead>
                   <TableHead className="text-right text-gray-300">Cantidad</TableHead>
-                  <TableHead className="text-right text-gray-300">Tarifa/Unidad</TableHead>
+                  <TableHead className="text-gray-300">Unidad</TableHead>
+                  <TableHead className="text-right text-gray-300">Tarifa</TableHead>
+                  <TableHead className="text-center text-gray-300 print:hidden">Descuento</TableHead>
                   <TableHead className="text-right text-gray-300">Total</TableHead>
                   <TableHead className="w-[50px] print:hidden"></TableHead>
                 </TableRow>
@@ -1277,20 +1369,66 @@ export default function InteractiveBudgetReport() {
               <TableBody>
                 {budgetItems.length === 0 ? (
                   <TableRow className="border-white/10">
-                    <TableCell colSpan={6} className="text-center text-gray-400">
+                    <TableCell colSpan={8} className="text-center text-gray-400">
                       No hay ítems en el presupuesto.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  budgetItems.map((item) => (
+                  budgetItems.map((item) => {
+                    const gross = itemGross(item)
+                    const discount = itemDiscount(item)
+                    const isPercent = (item.discount_type ?? "percent") === "percent"
+
+                    return (
                     <TableRow key={item.id} className="border-white/10 hover:bg-white/5">
                       <TableCell className="font-medium text-white">{item.category}</TableCell>
                       <TableCell className="text-gray-300">{item.description}</TableCell>
-                      <TableCell className="text-right text-gray-300">
-                        {item.quantity} {item.unit}
+                      <TableCell className="text-right text-gray-300">{item.quantity}</TableCell>
+                      <TableCell className="text-gray-400">{item.unit || "—"}</TableCell>
+                      <TableCell className="text-right text-gray-300">${money(item.rate)}</TableCell>
+
+                      <TableCell className="text-center print:hidden">
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={isPercent ? 100 : gross}
+                            step={isPercent ? 1 : 0.01}
+                            value={Number(item.discount_value ?? 0)}
+                            onChange={(e) =>
+                              handleItemDiscount(item.id, { discount_value: Number(e.target.value) })
+                            }
+                            className="w-20 rounded border border-white/20 bg-white/10 px-1.5 py-1 text-right text-xs text-white outline-none focus:border-green-400"
+                            aria-label={`Descuento de ${item.description}`}
+                          />
+                          <select
+                            value={item.discount_type ?? "percent"}
+                            onChange={(e) =>
+                              handleItemDiscount(item.id, { discount_type: e.target.value as DiscountType })
+                            }
+                            className="rounded border border-white/20 bg-white/10 px-1 py-1 text-xs text-white outline-none focus:border-green-400"
+                            aria-label={`Tipo de descuento de ${item.description}`}
+                          >
+                            <option value="percent" className="bg-gray-900">%</option>
+                            <option value="amount" className="bg-gray-900">$</option>
+                          </select>
+                        </div>
+                        {discount > 0 && (
+                          <div className="mt-1 text-[11px] text-red-400">−${money(discount)}</div>
+                        )}
                       </TableCell>
-                      <TableCell className="text-right text-gray-300">${item.rate.toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-white font-medium">${(item.quantity * item.rate).toFixed(2)}</TableCell>
+
+                      <TableCell className="text-right font-medium">
+                        {discount > 0 ? (
+                          <>
+                            <span className="mr-1.5 text-xs text-gray-500 line-through">${money(gross)}</span>
+                            <span className="text-white">${money(itemNet(item))}</span>
+                          </>
+                        ) : (
+                          <span className="text-white">${money(gross)}</span>
+                        )}
+                      </TableCell>
+
                       <TableCell className="text-center print:hidden">
                         <Button
                           variant="ghost"
@@ -1302,16 +1440,27 @@ export default function InteractiveBudgetReport() {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))
+                    )
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
 
           <div className="flex justify-end mt-6 pt-4 border-t border-white/10">
-            <div className="text-right">
+            <div className="space-y-1 text-right">
+              {showDiscounts && (
+                <>
+                  <p className="text-sm text-gray-400">
+                    Subtotal: <span className="font-mono text-gray-300">${money(subtotalBudget)}</span>
+                  </p>
+                  <p className="text-sm text-red-400">
+                    Descuento: <span className="font-mono">−${money(discountBudget)}</span>
+                  </p>
+                </>
+              )}
               <p className="text-xl font-bold text-white">
-                Presupuesto Total: <span className="text-green-400">${totalBudget.toFixed(2)}</span>
+                Presupuesto Total: <span className="text-green-400">${money(totalBudget)}</span>
               </p>
             </div>
           </div>
