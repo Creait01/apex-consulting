@@ -223,29 +223,41 @@ export function Loading({ label = "Cargando" }: { label?: string }) {
 
 /* ---------- Avisos ---------- */
 
-type Toast = { id: number; text: string; tone: "ok" | "warn" }
-const ToastCtx = createContext<(text: string, tone?: Toast["tone"]) => void>(() => {})
-export const useToast = () => useContext(ToastCtx)
+/** busy = algo en curso (queda hasta que se cierre con dismiss) */
+type Toast = { id: number; text: string; tone: "ok" | "warn" | "busy" }
+type Push = (text: string, tone?: Toast["tone"], ms?: number) => number
+const ToastCtx = createContext<{ push: Push; dismiss: (id: number) => void }>({ push: () => 0, dismiss: () => {} })
+/** Muestra un aviso; devuelve su id. ms = 0 lo deja fijo hasta dismiss(id) */
+export const useToast = () => useContext(ToastCtx).push
+export const useDismissToast = () => useContext(ToastCtx).dismiss
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
-  const push = useCallback((text: string, tone: Toast["tone"] = "ok") => {
-    const id = Date.now() + Math.random()
-    setToasts((t) => [...t, { id, text, tone }])
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200)
-  }, [])
+  const dismiss = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
+  const push = useCallback<Push>(
+    (text, tone = "ok", ms = 4200) => {
+      const id = Date.now() + Math.random()
+      setToasts((t) => [...t, { id, text, tone }])
+      if (ms > 0) setTimeout(() => dismiss(id), ms)
+      return id
+    },
+    [dismiss],
+  )
   return (
-    <ToastCtx.Provider value={push}>
+    <ToastCtx.Provider value={{ push, dismiss }}>
       {children}
       <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(92vw,380px)] flex-col gap-2" aria-live="polite">
         {toasts.map((t) => (
           <div
             key={t.id}
             className={cn(
-              "pointer-events-auto border-2 border-ink px-4 py-3 text-[14px] font-semibold shadow-hard",
-              t.tone === "ok" ? "bg-green-bg text-green" : "bg-amber-bg text-amber",
+              "pointer-events-auto flex items-center gap-3 border-2 border-ink px-4 py-3 text-[14px] font-semibold shadow-hard",
+              t.tone === "ok" && "bg-green-bg text-green",
+              t.tone === "warn" && "bg-amber-bg text-amber",
+              t.tone === "busy" && "bg-ink text-paper",
             )}
           >
+            {t.tone === "busy" && <span className="inline-block h-3 w-3 shrink-0 animate-pulse bg-red" />}
             {t.text}
           </div>
         ))}

@@ -58,10 +58,14 @@ export async function POST(request: Request) {
   const transport = mailer()
   if (!transport) return fail(MAILER_MISSING, 503)
 
+  // Tiempos de cada paso: salen en el registro del servidor y en la respuesta
+  const t0 = Date.now()
+  const timing = { pdfMs: 0, sendMs: 0 }
   let pdf: Buffer | null = null
   if (attachPdf) {
     try {
       pdf = await htmlToPdf(body.pdfHtml)
+      timing.pdfMs = Date.now() - t0
     } catch (e: any) {
       console.error("[enviar] PDF", e)
       return fail("No se pudo generar el PDF del documento. Intenta de nuevo en un momento.", 500)
@@ -91,6 +95,7 @@ export async function POST(request: Request) {
 
   try {
     const copy = user.email ?? replyToAddress()
+    const t1 = Date.now()
     const id = await transport.send({
       to,
       cc,
@@ -100,8 +105,10 @@ export async function POST(request: Request) {
       text: body.emailText,
       attachments,
     })
+    timing.sendMs = Date.now() - t1
+    console.info(`[enviar] ${transport.provider}: PDF ${timing.pdfMs} ms · correo ${timing.sendMs} ms`)
     await log("sent", null)
-    return NextResponse.json({ ok: true, to, messageId: id })
+    return NextResponse.json({ ok: true, to, messageId: id, timing })
   } catch (e: any) {
     console.error(`[enviar] ${transport.provider}`, e)
     const message = mailErrorMessage(e)

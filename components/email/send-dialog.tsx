@@ -1,10 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Check, Send } from "lucide-react"
 import { Modal } from "@/components/ui/modal"
-import { Field, Segmented, useToast } from "@/components/ui/kit"
+import { Field, Segmented, useDismissToast, useToast } from "@/components/ui/kit"
 import { useData } from "@/hooks/data"
 import { useAuth } from "@/hooks/useAuth"
 import { CID_ASSETS, PREVIEW_ASSETS, type EmailAssets, type EmailContent } from "@/lib/emails"
@@ -41,7 +41,13 @@ export function SendDialog({
   const { contactsFor, saveClient, reloadEmailLog } = useData()
   const { user } = useAuth()
   const toast = useToast()
+  const dismiss = useDismissToast()
   const saved = contactsFor(clientName)
+
+  // Mientras se revisa el correo el servidor va abriendo Chrome para el PDF
+  useEffect(() => {
+    fetch("/api/enviar/preparar", { method: "POST" }).catch(() => {})
+  }, [])
 
   // Todos los contactos guardados van marcados; se puede quitar alguno solo para este envío
   const [picked, setPicked] = useState<Set<string>>(() => new Set(saved.map((c) => c.email)))
@@ -76,37 +82,42 @@ export function SendDialog({
     const bad = [...extraList, ...splitEmails(cc)].filter((x) => !EMAIL_RE.test(x))
     if (bad.length) return setError(`Revisa: «${bad[0]}» no es un correo válido.`)
     if (!to.length) return setError("Marca o escribe al menos un correo.")
+
+    // El envío sigue en segundo plano: el diálogo se cierra y un aviso fijo dice
+    // "Enviando…" hasta que el servidor termina (PDF + correo).
+    const body = JSON.stringify({
+      to,
+      cc,
+      copyMe,
+      subject,
+      emailHtml: payload.build(message, CID_ASSETS).html,
+      emailText: email.text,
+      attachPdf: true,
+      pdfHtml: payload.pdfHtml,
+      filename: payload.filename,
+      log: { ...payload.log, clientName },
+    })
+    const who = to.length === 1 ? to[0] : plural(to.length, "correo", "correos")
+    const newContacts = remember && fresh.length ? [...saved, ...fresh.map((address) => ({ name: "", email: address }))] : null
     setSending(true)
+    const busy = toast(`Enviando a ${who}…`, "busy", 0)
+    onClose()
+
+    const started = Date.now()
     try {
-      const res = await fetch("/api/enviar", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          to,
-          cc,
-          copyMe,
-          subject,
-          emailHtml: payload.build(message, CID_ASSETS).html,
-          emailText: email.text,
-          attachPdf: true,
-          pdfHtml: payload.pdfHtml,
-          filename: payload.filename,
-          log: { ...payload.log, clientName },
-        }),
-      })
+      const res = await fetch("/api/enviar", { method: "POST", headers: { "content-type": "application/json" }, body })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || "No se pudo enviar el correo.")
-      if (remember && fresh.length) {
-        const { error } = await saveClient(clientName, { contacts: [...saved, ...fresh.map((address) => ({ name: "", email: address }))] })
+      if (newContacts) {
+        const { error } = await saveClient(clientName, { contacts: newContacts })
         if (error) toast(error, "warn")
       }
-      reloadEmailLog()
-      toast(to.length === 1 ? `Enviado a ${to[0]}.` : `Enviado a ${plural(to.length, "correo", "correos")}.`)
-      onClose()
+      toast(`Enviado a ${who} (${Math.max(1, Math.round((Date.now() - started) / 1000))} s).`)
     } catch (err: any) {
-      setError(err.message)
+      toast(`No salió el correo a ${who}: ${err.message}`, "warn", 10_000)
     } finally {
-      setSending(false)
+      dismiss(busy)
+      reloadEmailLog()
     }
   }
 

@@ -3,7 +3,7 @@ import { CID_ASSETS, defaultStatementMessage, pdfName, statementEmail } from "@/
 import { toBudget, toClientRecord, toPayment, toSettings } from "@/lib/rows"
 import { weeklyPlan, type WeeklyItem } from "@/lib/weekly"
 import { EPS } from "@/lib/metrics"
-import { openPdfRenderer } from "./pdf"
+import { htmlToPdf } from "./pdf"
 import { MAILER_MISSING, logoAttachments, mailErrorMessage, mailer, replyToAddress, safeFilename, type Mailer } from "./mail"
 
 /* Arma y envía el estado de cuenta semanal de cada cliente que corresponde: el
@@ -57,18 +57,12 @@ export async function runWeekly(
   let sent = 0
   let failed = 0
 
-  if (pending.length) {
-    const renderer = await openPdfRenderer()
-    try {
-      for (const item of pending) {
-        const r = await sendOne(item, { settings, today, testTo: opts.testTo, transport, render: renderer.render })
-        if (r.status === "sent") sent += 1
-        else failed += 1
-        await opts.onResult(r)
-      }
-    } finally {
-      await renderer.close()
-    }
+  // Un PDF tras otro con el mismo Chrome (queda abierto entre envíos)
+  for (const item of pending) {
+    const r = await sendOne(item, { settings, today, testTo: opts.testTo, transport, render: htmlToPdf })
+    if (r.status === "sent") sent += 1
+    else failed += 1
+    await opts.onResult(r)
   }
 
   return {
