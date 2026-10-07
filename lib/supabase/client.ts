@@ -3,30 +3,16 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 let client: SupabaseClient | null = null
 
-export function createClient() {
-  // Return existing client if already created
-  if (client) {
-    return client
+/** Cliente de Supabase del navegador (una sola instancia) */
+export function getClient(): SupabaseClient {
+  if (client) return client
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !key) {
+    throw new Error("Faltan NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en las variables de entorno.")
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("[v0] Missing Supabase environment variables!")
-    throw new Error(
-      "Missing Supabase environment variables. Please ensure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set.",
-    )
-  }
-
-  // Create and store the client instance
-  client = createBrowserClient(supabaseUrl, supabaseAnonKey)
-  return client
-}
-
-export function getClient() {
-  if (!client) {
-    return createClient()
-  }
+  client = createBrowserClient(url, key)
   return client
 }

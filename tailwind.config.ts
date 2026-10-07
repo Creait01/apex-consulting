@@ -1,99 +1,36 @@
 import type { Config } from "tailwindcss"
 
+/* Paleta y tipografía del manual de marca de Apex (Desktop\apex\MANUAL-DE-MARCA.md).
+   El rojo es de la marca, no significa error: lo pendiente o mal va en ámbar y
+   lo resuelto en verde. */
 const config: Config = {
-  darkMode: ["class"],
-  content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "*.{js,ts,jsx,tsx,mdx}",
-  ],
+  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./hooks/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
-      fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
-      },
       colors: {
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        chart: {
-          "1": "hsl(var(--chart-1))",
-          "2": "hsl(var(--chart-2))",
-          "3": "hsl(var(--chart-3))",
-          "4": "hsl(var(--chart-4))",
-          "5": "hsl(var(--chart-5))",
-        },
-        sidebar: {
-          DEFAULT: "hsl(var(--sidebar-background))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          primary: "hsl(var(--sidebar-primary))",
-          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-          border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
-        },
+        night: { DEFAULT: "#070B17", 2: "#121833", glow: "#1B2350" },
+        red: { DEFAULT: "#E8380D", deep: "#B8300F", btn: "#C8360F", glow: "#FF4A1C" },
+        paper: { DEFAULT: "#F6F1E8", 2: "#EDE6D8" },
+        ink: { DEFAULT: "#0E1422", 2: "#4A5263", mute: "#8A8F9C" },
+        snow: { DEFAULT: "#F3F5FB", 2: "#B9C0D4", mute: "#8790A8" },
+        amber: { bg: "#FDF1D8", DEFAULT: "#B45309" },
+        green: { bg: "#DCF5E4", DEFAULT: "#15803D" },
       },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+      fontFamily: {
+        sans: ['"Mona Sans"', '"Segoe UI"', "system-ui", "sans-serif"],
+        mono: ['"Cascadia Mono"', "Consolas", "monospace"],
       },
-      keyframes: {
-        "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
-        },
-        "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
-        },
+      borderRadius: { none: "0" },
+      boxShadow: {
+        hard: "4px 4px 0 0 #0E1422",
+        "hard-sm": "2px 2px 0 0 #0E1422",
+        "hard-lg": "7px 7px 0 0 #0E1422",
+        "hard-red": "4px 4px 0 0 #E8380D",
       },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-      },
+      screens: { xs: "480px" },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [],
 }
+
 export default config

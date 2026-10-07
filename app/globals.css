@@ -2,645 +2,241 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}
+/* --------------------------------------------------------------------------
+   Apex · sistema administrativo
+   Brutalista sobre la marca: papel, tinta, bordes duros, sombras sólidas y un
+   solo acento rojo (el marcador del pico). Sin radios, sin degradados en la UI.
+   -------------------------------------------------------------------------- */
 
 @layer base {
   :root {
-    --font-sans: var(--font-geist-sans);
-    --font-mono: var(--font-geist-mono);
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --night: #070b17;
+    --night-2: #121833;
+    --paper: #f6f1e8;
+    --ink: #0e1422;
+    --ink-2: #4a5263;
+    --mute: #8a8f9c;
+    --red: #e8380d;
+    --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    color-scheme: light;
   }
 
-  /* Updated dark theme for APEX CONSULTING landing page */
-  .dark {
-    --background: 220 20% 4%;
-    --foreground: 0 0% 98%;
-    --card: 220 20% 8%;
-    --card-foreground: 0 0% 98%;
-    --popover: 220 20% 8%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 220 20% 4%;
-    --secondary: 220 15% 15%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 220 15% 15%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 210 100% 50%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 15% 18%;
-    --input: 220 15% 18%;
-    --ring: 210 100% 50%;
-    --chart-1: 210 100% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 220 20% 6%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 210 100% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 15% 12%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 220 15% 15%;
-    --sidebar-ring: 210 100% 50%;
+  html {
+    -webkit-text-size-adjust: 100%;
   }
-}
 
-@layer base {
-  * {
-    @apply border-border;
-  }
   body {
-    @apply bg-background text-foreground;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Mona Sans", "Segoe UI", system-ui, sans-serif;
+    font-stretch: 100%;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--red);
+    outline-offset: 2px;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
   }
 }
-
-/* ==========================================================================
-   LANDING — "Libro mayor"
-   Anclada en el papel de contabilidad de franjas (green bar paper).
-   Todo lo de esta sección lleva el prefijo .lg- y vive bajo .ledger.
-
-   Va dentro de @layer components a propósito: así las utilidades de Tailwind
-   (que se emiten en la capa posterior) pueden anular estas reglas puntualmente
-   sin pelear por especificidad.
-   ========================================================================== */
 
 @layer components {
-
-.ledger {
-  --paper: #fbfbf7;
-  --bar: #e8efe6;
-  --ink: #1a1d1a;
-  --ink-60: #5c625b;
-  --ink-40: #878d86;
-  --rule: #c3cdbf;
-  --rule-soft: #dfe5db;
-  --posted: #2f6b4f;
-  --pending: #b8873a;
-
-  --col-ref: 8.5rem;
-  --gut: 2rem;
-
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--font-body), Georgia, serif;
-  font-size: 1.0625rem;
-  line-height: 1.65;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* El papel llega hasta el overscroll, sin que asome el tema oscuro del panel */
-html:has(.ledger) body {
-  background: #fbfbf7;
-}
-
-/* --- Roles tipográficos ------------------------------------------------- */
-
-.lg-display {
-  font-family: var(--font-display), system-ui, sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.033em;
-  line-height: 0.98;
-  text-wrap: balance;
-}
-
-.lg-mono {
-  font-family: var(--font-ledger), ui-monospace, monospace;
-  font-size: 0.6875rem;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.lg-num {
-  font-family: var(--font-ledger), ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-/* --- Retícula del libro: columna de referencia + cuerpo ----------------- */
-
-.lg-shell {
-  max-width: 74rem;
-  margin: 0 auto;
-  padding-inline: 1.5rem;
-}
-
-.lg-entry {
-  display: grid;
-  grid-template-columns: var(--col-ref) minmax(0, 1fr);
-  gap: var(--gut);
-  align-items: start;
-}
-
-.lg-entry-ref {
-  color: var(--ink-40);
-  padding-top: 0.45rem;
-}
-
-.lg-entry-body {
-  padding-top: 0.45rem;
-}
-
-/* Doble regla del asiento: trazo firme sobre la referencia, tenue sobre el
-   cuerpo. Se pide explícitamente, no viene por defecto. */
-.lg-entry--ruled > .lg-entry-ref {
-  border-top: 1px solid var(--ink);
-}
-
-.lg-entry--ruled > .lg-entry-body {
-  border-top: 1px solid var(--rule);
-}
-
-@media (max-width: 48rem) {
-  .ledger {
-    --gut: 0;
-    font-size: 1rem;
+  /* Titulares de marca: Mona Sans ancho 125, peso 850 */
+  .display {
+    font-stretch: 125%;
+    font-weight: 850;
+    letter-spacing: -0.035em;
+    line-height: 0.98;
   }
-  .lg-entry {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.75rem;
+  .display-2 {
+    font-stretch: 112%;
+    font-weight: 800;
+    letter-spacing: -0.022em;
+    line-height: 1.06;
   }
-  .lg-entry--ruled > .lg-entry-body {
-    border-top: 0;
-    padding-top: 0;
+  .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* Fondo noche de la marca, con grano */
+  .bg-noche {
+    background:
+      radial-gradient(120% 70% at 70% 100%, #1b2350 0%, transparent 60%),
+      linear-gradient(180deg, #070b17, #121833);
+    position: relative;
+    isolation: isolate;
+  }
+  .bg-noche::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: var(--grain);
+    opacity: 0.06;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* Bloques duros */
+  .slab {
+    @apply border-2 border-ink bg-white;
+  }
+  .slab-shadow {
+    @apply border-2 border-ink bg-white shadow-hard;
+  }
+
+  /* Botones */
+  .btn {
+    @apply inline-flex h-10 select-none items-center justify-center gap-2 whitespace-nowrap border-2 border-ink px-4 text-sm font-semibold transition-[transform,box-shadow] duration-100 disabled:pointer-events-none disabled:opacity-40;
+    font-stretch: 105%;
+  }
+  .btn-raised {
+    @apply shadow-hard-sm hover:-translate-x-px hover:-translate-y-px hover:shadow-hard active:translate-x-0.5 active:translate-y-0.5 active:shadow-none;
+  }
+  .btn-ink {
+    @apply btn btn-raised bg-ink text-paper;
+  }
+  .btn-red {
+    @apply btn btn-raised bg-red-btn text-white;
+  }
+  .btn-paper {
+    @apply btn btn-raised bg-white text-ink;
+  }
+  .btn-ghost {
+    @apply btn border-transparent bg-transparent text-ink hover:border-ink hover:bg-white;
+  }
+  .btn-sm {
+    @apply h-8 px-2.5 text-[13px];
+  }
+  .btn-icon {
+    @apply h-8 w-8 px-0;
+  }
+
+  /* Campos */
+  .field-label {
+    @apply mb-1.5 block text-[13px] font-semibold text-ink-2;
+  }
+  .input {
+    @apply h-10 w-full border-2 border-ink bg-white px-3 text-[15px] text-ink outline-none placeholder:text-ink-mute focus:shadow-hard-red;
+  }
+  .input:focus-visible {
+    outline: none;
+  }
+  textarea.input {
+    @apply h-auto min-h-[84px] py-2 leading-snug;
+  }
+  select.input {
+    @apply cursor-pointer appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%230E1422' stroke-width='2.2'/></svg>");
+    background-position: right 12px center;
+  }
+
+  /* Tablas densas, como software real */
+  .tbl {
+    @apply w-full border-collapse text-[14px];
+  }
+  .tbl thead th {
+    @apply border-b-2 border-ink px-3 pb-2 pt-1 text-left text-[12.5px] font-semibold text-ink-2;
+    font-stretch: 105%;
+  }
+  .tbl tbody td {
+    @apply border-b border-ink/10 px-3 py-2.5 align-middle;
+  }
+  .tbl tbody tr:hover td {
+    @apply bg-paper/70;
+  }
+  .tbl tfoot td {
+    @apply border-t-2 border-ink px-3 py-2.5 font-bold;
+  }
+  .tbl .r {
+    @apply text-right;
+  }
+
+  /* Estados (manual §3: ámbar = pendiente o mal, verde = resuelto) */
+  .tag {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap border px-1.5 py-0.5 text-[12px] font-semibold leading-none;
+  }
+  .tag-ok {
+    @apply tag border-green/40 bg-green-bg text-green;
+  }
+  .tag-warn {
+    @apply tag border-amber/40 bg-amber-bg text-amber;
+  }
+  .tag-late {
+    @apply tag border-amber bg-amber text-white;
+  }
+  .tag-off {
+    @apply tag border-ink/25 bg-paper text-ink-mute line-through;
+  }
+  .tag-ink {
+    @apply tag border-ink bg-white text-ink;
+  }
+  /* Borrador: enviado al cliente, todavía sin aprobar */
+  .tag-quote {
+    @apply tag border-dashed border-ink-2 bg-white text-ink-2;
   }
 }
 
-/* --- Franjas del papel contable -----------------------------------------
-   Las filas van envueltas en el div de animación, así que la alternancia se
-   cuenta sobre el envoltorio y el color se pinta en la fila de adentro.     */
-
-.lg-bars > *:nth-child(odd) .lg-bar-row {
-  background: var(--bar);
+@layer utilities {
+  .grain {
+    position: relative;
+  }
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: var(--grain);
+    opacity: 0.06;
+    pointer-events: none;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink-2) transparent;
+  }
 }
 
-.lg-bar-row {
-  transition: background-color 0.45s ease;
+/* El trazo de la cresta se dibuja una vez al cargar (manual §6: el movimiento construye) */
+@keyframes ridge-draw {
+  from {
+    stroke-dashoffset: var(--len);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
-
-/* --- Animación de scroll: cada bloque se "asienta" ---------------------- */
-
-.lg-reveal {
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.lg-reveal.is-posted {
-  opacity: 1;
-  transform: none;
-}
-
-/* La regla superior de cada asiento se traza de izquierda a derecha */
-.lg-ruled {
-  position: relative;
-}
-
-.lg-ruled::before {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  height: 1px;
-  background: var(--ink);
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.lg-ruled.is-posted::before {
-  transform: scaleX(1);
-}
-
-/* --- Barra de saldo (firma de la página) -------------------------------- */
-
-.lg-balance {
-  position: fixed;
-  inset-inline: 0;
-  bottom: 0;
-  z-index: 40;
-  border-top: 1px solid var(--ink);
-  background: rgba(251, 251, 247, 0.92);
-  backdrop-filter: blur(8px);
-  transform: translateY(101%);
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.lg-balance.is-open {
-  transform: none;
-}
-
-.lg-tick {
-  display: block;
-  width: 100%;
-  height: 2px;
-  background: var(--rule-soft);
-  overflow: hidden;
-}
-
-.lg-tick-fill {
-  display: block;
-  height: 100%;
-  background: var(--posted);
-  transform-origin: left center;
-  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* La partida recién asentada entra desde abajo, como una línea impresa */
-@keyframes lg-post-line {
+/* Solo opacidad: un transform de CSS anularía el escalado del marcador en el SVG */
+@keyframes marker-in {
   from {
     opacity: 0;
-    transform: translateY(0.6em);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
-
-.lg-posting {
-  animation: lg-post-line 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+.ridge-draw path:first-of-type {
+  stroke-dasharray: var(--len);
+  animation: ridge-draw 1.1s cubic-bezier(0.65, 0, 0.35, 1) both;
 }
-
-/* --- Enlaces y foco ----------------------------------------------------- */
-
-.lg-link {
-  color: inherit;
-  text-decoration: none;
-  background-image: linear-gradient(currentColor, currentColor);
-  background-repeat: no-repeat;
-  background-position: 0 100%;
-  background-size: 0% 1px;
-  transition: background-size 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.lg-link:hover {
-  background-size: 100% 1px;
-}
-
-.ledger a:focus-visible,
-.ledger button:focus-visible {
-  outline: 2px solid var(--posted);
-  outline-offset: 3px;
-}
-
-/* --- Botones ------------------------------------------------------------ */
-
-.lg-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.85rem 1.5rem;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--paper);
-  transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-.lg-btn:hover {
-  background: var(--posted);
-  border-color: var(--posted);
-}
-
-.lg-btn-ghost {
-  background: transparent;
-  color: var(--ink);
-}
-
-.lg-btn-ghost:hover {
-  background: var(--ink);
-  color: var(--paper);
-  border-color: var(--ink);
-}
-
-.lg-arrow {
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.lg-btn:hover .lg-arrow {
-  transform: translateX(0.25rem);
-}
-
-/* --- Canvas de tinta (la firma) ------------------------------------------ */
-
-.lg-ink {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-/* --- Escena WebGL del Ávila ----------------------------------------------
-   Fija detrás de todo el documento; el contenido lleva z-index encima.      */
-
-.lg-scene {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
-/* --- La cordillera del Ávila ---------------------------------------------
-   Las reglas del libro se curvan hasta volverse curvas de nivel. Cada trazo
-   se dibuja de oeste a este al abrir la página.                             */
-
-.lg-ridge {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 46vh;
-  max-height: 420px;
-  width: 100%;
-  pointer-events: none;
-}
-
-.lg-ridge-layer {
-  transition: transform 0.25s ease-out;
-  will-change: transform;
-}
-
-.lg-ridge path {
-  fill: none;
-  stroke-width: 1;
-  stroke-dasharray: 1 1;
-  stroke-dashoffset: 1;
-  transition: stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.is-opened .lg-ridge path {
-  stroke-dashoffset: 0;
-}
-
-.lg-c-low {
-  stroke: var(--rule-soft);
-}
-
-.lg-c-mid {
-  stroke: var(--rule);
-}
-
-.lg-c-high {
-  stroke: var(--posted);
-  opacity: 0.55;
-}
-
-.lg-c-ridge {
-  stroke: var(--ink);
-  stroke-width: 1.5;
-}
-
-.lg-ridge-peak {
-  opacity: 0;
-  transition: opacity 0.8s ease 1.7s;
-}
-
-.is-opened .lg-ridge-peak {
-  opacity: 1;
-}
-
-.lg-ridge-peak circle {
-  fill: var(--posted);
-}
-
-.lg-ridge-label {
-  font-family: var(--font-ledger), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  fill: var(--ink-60);
-}
-
-/* --- Apertura: el titular se compone línea por línea --------------------- */
-
-.lg-line {
-  display: block;
-  overflow: hidden;
-}
-
-.lg-line-inner {
-  display: block;
-  transform: translateY(112%);
-  transition: transform 1s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.is-opened .lg-line-inner {
-  transform: none;
-}
-
-/* --- Botones magnéticos --------------------------------------------------- */
-
-.lg-magnetic {
-  display: inline-block;
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
-}
-
-/* --- Flujo vivo ----------------------------------------------------------- */
-
-.lg-flow-node {
-  border-top: 1px solid var(--ink);
-  padding-top: 0.9rem;
-  opacity: 0.3;
-  transform: translateY(8px);
-  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.lg-flow-node.is-on {
-  opacity: 1;
-  transform: none;
-}
-
-/* estado vacío reserva su línea para que nada salte */
-.lg-flow-node .lg-mono:last-child {
-  min-height: 1.1em;
-  white-space: pre-wrap;
-}
-
-.lg-flow-line {
-  align-self: start;
-  margin-top: 2.4rem;
-  height: 1px;
-  background: var(--rule-soft);
-}
-
-.lg-flow-line-fill {
-  display: block;
-  height: 100%;
-  background: var(--posted);
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.lg-flow-line-fill.is-on {
-  transform: scaleX(1);
-}
-
-/* --- Ventana del sistema --------------------------------------------------- */
-
-.lg-window {
-  border: 1px solid var(--ink);
-  background: var(--paper);
-}
-
-.lg-window-head {
-  border-bottom: 1px solid var(--ink);
-  background: var(--bar);
-}
-
-.lg-fade-item {
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.lg-fade-item.is-on {
-  opacity: 1;
-  transform: none;
-}
-
-.lg-hours-bar {
-  display: block;
-  height: 3px;
-  background: var(--rule-soft);
-  overflow: hidden;
-}
-
-.lg-hours-fill {
-  display: block;
-  height: 100%;
-  background: var(--posted);
-  transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* --- Respeto por reduced motion ----------------------------------------- */
-
-@media (prefers-reduced-motion: reduce) {
-  .lg-reveal,
-  .lg-ruled::before,
-  .lg-balance,
-  .lg-tick-fill,
-  .lg-link,
-  .lg-arrow,
-  .lg-line-inner,
-  .lg-magnetic,
-  .lg-flow-node,
-  .lg-flow-line-fill,
-  .lg-fade-item,
-  .lg-hours-fill {
-    transition: none;
-  }
-  .lg-reveal {
-    opacity: 1;
-    transform: none;
-  }
-  .lg-ruled::before {
-    transform: scaleX(1);
-  }
-  .lg-posting {
-    animation: none;
-  }
-  .lg-line-inner {
-    transform: none;
-  }
-  .lg-flow-node {
-    opacity: 1;
-    transform: none;
-  }
-  .lg-flow-line-fill {
-    transform: scaleX(1);
-  }
-  .lg-fade-item {
-    opacity: 1;
-    transform: none;
-  }
-  .lg-ridge path,
-  .lg-ridge-layer,
-  .lg-ridge-peak {
-    transition: none;
-  }
-  .lg-ridge path {
-    stroke-dashoffset: 0;
-  }
-  .lg-ridge-peak {
-    opacity: 1;
-  }
-}
-
-} /* fin @layer components */
-
-/* Las anclas del encabezado se desplazan suave, sin tapar el título */
-html:has(.ledger) {
-  scroll-behavior: smooth;
-}
-
-.ledger [id] {
-  scroll-margin-top: 5.5rem;
+.ridge-draw path:last-of-type {
+  animation: marker-in 0.35s 1s ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html:has(.ledger) {
-    scroll-behavior: auto;
-  }
-}
-
-/* Cuando Lenis toma el scroll, el suavizado nativo debe apagarse
-   para no pelear con el suyo */
-html.lenis,
-html.lenis body {
-  height: auto;
-}
-
-html.lenis-smooth {
-  scroll-behavior: auto !important;
-}
-
-.lenis.lenis-stopped {
-  overflow: hidden;
-}
-
-/* Print styles for budget report */
-@media print {
-  .print-company-name {
-    color: black !important;
+  .ridge-draw path {
+    animation: none !important;
   }
 }

@@ -1,175 +1,98 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, createContext, useContext, useRef } from "react"
+import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import type { Session, User } from "@supabase/supabase-js"
 import { getClient } from "@/lib/supabase/client"
-import type { User, Session } from "@supabase/supabase-js"
 
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
-  error: string | null
-  signIn: (email: string, password: string) => Promise<{ error: any }>
-  signUp: (email: string, password: string) => Promise<{ error: any }>
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
-  updatePassword: (newPassword: string) => Promise<{ error: any }>
-  updateEmail: (newEmail: string) => Promise<{ error: any }>
+  /** Verifica la contraseña actual antes de cambiarla */
+  changePassword: (current: string, next: string) => Promise<{ error: string | null }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
+  if (!context) throw new Error("useAuth debe usarse dentro de <AuthProvider>")
   return context
+}
+
+const translate = (msg: string | undefined) => {
+  if (!msg) return "No se pudo completar la operación."
+  if (/invalid login credentials/i.test(msg)) return "Correo o contraseña incorrectos."
+  if (/email not confirmed/i.test(msg)) return "El correo todavía no está confirmado."
+  if (/should be different/i.test(msg)) return "La nueva contraseña debe ser distinta a la actual."
+  if (/at least/i.test(msg)) return "La contraseña es demasiado corta."
+  if (/network|fetch/i.test(msg)) return "Sin conexión con el servidor. Revisa tu internet."
+  return msg
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null)
-  const isInitializedRef = useRef(false)
 
   useEffect(() => {
-    if (isInitializedRef.current) {
-      return
-    }
-    isInitializedRef.current = true
-
-    let supabase
-    try {
-      supabase = getClient()
-    } catch (err) {
-      console.error("[v0] Failed to create Supabase client:", err)
-      setError(err instanceof Error ? err.message : "Failed to initialize Supabase client")
-      setLoading(false)
-      return
-    }
+    const supabase = getClient()
+    let alive = true
 
     supabase.auth
       .getSession()
-      .then(({ data: { session }, error }) => {
-        if (error) {
-          setError(`Error de conexión: ${error.message}`)
-        } else {
-          setSession(session)
-          setUser(session?.user ?? null)
-        }
-        setLoading(false)
+      .then(({ data }) => {
+        if (!alive) return
+        setSession(data.session)
+        setUser(data.session?.user ?? null)
       })
-      .catch((err) => {
-        console.error("[v0] Supabase connection error:", err)
-        setError("No se pudo conectar con Supabase")
-        setLoading(false)
-      })
+      .finally(() => alive && setLoading(false))
 
-    if (!subscriptionRef.current) {
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session)
-        setUser(session?.user ?? null)
-        if (loading) {
-          setLoading(false)
-        }
-      })
-
-      subscriptionRef.current = subscription
-    }
+    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next)
+      setUser(next?.user ?? null)
+      setLoading(false)
+    })
 
     return () => {
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe()
-        subscriptionRef.current = null
-      }
-      isInitializedRef.current = false
+      alive = false
+      data.subscription.unsubscribe()
     }
-  }, []) // Empty dependency array to run only once
+  }, [])
 
-  const signIn = async (email: string, password: string) => {
-    try {
-      const supabase = getClient()
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      return { error }
-    } catch (err) {
-      console.error("[v0] Sign in exception:", err)
-      return { error: { message: "Error de conexión con Supabase" } }
-    }
-  }
-
-  const signUp = async (email: string, password: string) => {
-    try {
-      const supabase = getClient()
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-      })
-      return { error }
-    } catch (err) {
-      return { error: { message: "Error de conexión con Supabase" } }
-    }
-  }
-
-  const signOut = async () => {
-    try {
-      setLoading(true)
-      const supabase = getClient()
-      await supabase.auth.signOut()
-      setUser(null)
-      setSession(null)
-      setError(null)
-    } catch (err) {
-      console.error("Error signing out:", err)
-      setError("Error al cerrar sesión")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const updatePassword = async (newPassword: string) => {
-    try {
-      const supabase = getClient()
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      })
-      return { error }
-    } catch (err) {
-      return { error: { message: "Error actualizando contraseña" } }
-    }
-  }
-
-  const updateEmail = async (newEmail: string) => {
-    try {
-      const supabase = getClient()
-      const { error } = await supabase.auth.updateUser({
-        email: newEmail,
-      })
-      return { error }
-    } catch (err) {
-      return { error: { message: "Error actualizando email" } }
-    }
-  }
-
-  const value = {
-    user,
-    session,
-    loading,
-    error,
-    signIn,
-    signUp,
-    signOut,
-    updatePassword,
-    updateEmail,
-  }
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      session,
+      loading,
+      async signIn(email, password) {
+        try {
+          const { error } = await getClient().auth.signInWithPassword({ email: email.trim(), password })
+          return { error: error ? translate(error.message) : null }
+        } catch (e: any) {
+          return { error: translate(e?.message) }
+        }
+      },
+      async signOut() {
+        await getClient().auth.signOut()
+        setUser(null)
+        setSession(null)
+      },
+      async changePassword(current, next) {
+        const email = user?.email
+        if (!email) return { error: "Sin sesión." }
+        const supabase = getClient()
+        const check = await supabase.auth.signInWithPassword({ email, password: current })
+        if (check.error) return { error: "La contraseña actual no es correcta." }
+        const { error } = await supabase.auth.updateUser({ password: next })
+        return { error: error ? translate(error.message) : null }
+      },
+    }),
+    [user, session, loading],
+  )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
