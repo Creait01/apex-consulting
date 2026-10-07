@@ -40,16 +40,19 @@ Se activa en **Ajustes → Estado de cuenta automático** (día y hora de Caraca
 
 Cómo sale: `pg_cron` corre cada hora `dispatch_weekly_statements()`; cuando toca, crea una corrida con un token de un solo uso y llama por `pg_net` a `<app_url>/api/estados-semanales`. La app lee los datos de esa corrida con `statement_run_data`, envía y anota cada correo. Si algo falla, la base lo reintenta en la hora siguiente (hasta 3 veces ese día) sin repetir a quien ya lo recibió. `app_url` se registra solo al abrir la app publicada (https). **Enviarme una prueba** manda todo lo de esa semana solo a tu correo.
 
-Variables de entorno (en `.env.local` y en Render):
+**En Render se envía con [Resend](https://resend.com) (API por HTTPS).** El plan gratis de Render bloquea los puertos SMTP (25, 465 y 587) desde septiembre de 2025, así que Gmail por SMTP no sale desde ahí. Si existe `RESEND_API_KEY` se usa Resend; si no, SMTP (Gmail), que sirve en local o en un plan pago.
 
 | Variable | Valor |
 |---|---|
-| `GMAIL_USER` | `edwin.dev.21114@gmail.com` |
-| `GMAIL_APP_PASSWORD` | Contraseña de aplicación de Google (16 letras) |
+| `RESEND_API_KEY` | Clave de Resend (`re_…`). En Render. |
+| `MAIL_FROM` | Remitente en tu dominio verificado, p. ej. `cobros@apexconsulting-it.site`. Sin dominio verificado: `onboarding@resend.dev` (solo llega a tu propio correo). |
+| `MAIL_REPLY_TO` | Opcional. A dónde llegan las respuestas y las copias; por defecto `GMAIL_USER`. |
+| `GMAIL_USER` | `edwin.dev.21114@gmail.com` (respuestas y copias; y remitente si se usa SMTP) |
+| `GMAIL_APP_PASSWORD` | Solo para SMTP: contraseña de aplicación de Google (16 letras) |
 | `MAIL_FROM_NAME` | Opcional. Nombre del remitente; por defecto "Apex Consulting" |
 | `CHROME_EXECUTABLE_PATH` | Opcional, solo en local si Chrome no está en la ruta de siempre |
 
-Para crear la contraseña de aplicación: en la cuenta de Google, **Seguridad → Verificación en 2 pasos** (debe estar activa) → **Contraseñas de aplicaciones** → nombre "Apex" → copiar las 16 letras en `GMAIL_APP_PASSWORD`.
+Resend: crear la cuenta, **Domains → Add domain** `apexconsulting-it.site`, copiar los registros DNS que muestra (DKIM `resend._domainkey` y los de `send`) en Spaceship (donde está el DNS del dominio), esperar a que diga *Verified* y crear la clave en **API Keys** con permiso de envío.
 
 ## Base de datos
 

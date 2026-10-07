@@ -4,7 +4,7 @@ import { toBudget, toClientRecord, toPayment, toSettings } from "@/lib/rows"
 import { weeklyPlan, type WeeklyItem } from "@/lib/weekly"
 import { EPS } from "@/lib/metrics"
 import { openPdfRenderer } from "./pdf"
-import { MAILER_MISSING, logoAttachments, mailer, safeFilename, senderAddress, senderName, smtpErrorMessage } from "./mail"
+import { MAILER_MISSING, logoAttachments, mailErrorMessage, mailer, replyToAddress, safeFilename, type Mailer } from "./mail"
 
 /* Arma y envía el estado de cuenta semanal de cada cliente que corresponde: el
    mismo aviso y el mismo PDF que se mandan a mano desde la ficha del cliente,
@@ -54,7 +54,6 @@ export async function runWeekly(
 
   const transport = mailer()
   if (!transport) throw new WeeklyRunError(MAILER_MISSING)
-  const from = senderAddress()
   let sent = 0
   let failed = 0
 
@@ -62,7 +61,7 @@ export async function runWeekly(
     const renderer = await openPdfRenderer()
     try {
       for (const item of pending) {
-        const r = await sendOne(item, { settings, today, testTo: opts.testTo, transport, from, render: renderer.render })
+        const r = await sendOne(item, { settings, today, testTo: opts.testTo, transport, render: renderer.render })
         if (r.status === "sent") sent += 1
         else failed += 1
         await opts.onResult(r)
@@ -86,8 +85,7 @@ async function sendOne(
     settings: ReturnType<typeof toSettings>
     today: string
     testTo?: string
-    transport: NonNullable<ReturnType<typeof mailer>>
-    from: string
+    transport: Mailer
     render: (html: string) => Promise<Buffer>
   },
 ): Promise<WeeklyResult> {
@@ -116,21 +114,20 @@ async function sendOne(
     return { ...base, status: "error", error: "No se pudo generar el PDF." }
   }
 
+  // Copia oculta a tu correo (el de las respuestas): queda constancia en tu bandeja
+  const copy = replyToAddress()
   try {
-    await ctx.transport.sendMail({
-      from: { name: senderName(), address: ctx.from },
+    await ctx.transport.send({
       to,
-      // Copia oculta a la cuenta que envía: queda constancia en su bandeja
-      bcc: ctx.testTo ? undefined : ctx.from || undefined,
-      replyTo: ctx.from,
+      bcc: !ctx.testTo && copy && !to.includes(copy) ? [copy] : [],
       subject,
       html: mail.html,
       text: mail.text,
       attachments: [...logoAttachments(), { filename: safeFilename(filename), content: pdf, contentType: "application/pdf" }],
     })
     return { ...base, status: "sent" }
-  } catch (e) {
-    console.error("[estados-semanales] SMTP", item.name, e)
-    return { ...base, status: "error", error: smtpErrorMessage(e) }
+  } catch (e: any) {
+    console.error(`[estados-semanales] ${ctx.transport.provider}`, item.name, e)
+    return { ...base, status: "error", error: `${mailErrorMessage(e)} (${String(e?.message ?? e).slice(0, 200)})` }
   }
 }

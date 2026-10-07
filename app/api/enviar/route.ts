@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { htmlToPdf } from "@/lib/server/pdf"
-import { MAILER_MISSING, logoAttachments, mailer, safeFilename, senderAddress, senderName, smtpErrorMessage } from "@/lib/server/mail"
+import { MAILER_MISSING, logoAttachments, mailErrorMessage, mailer, replyToAddress, safeFilename } from "@/lib/server/mail"
 import { sessionClient } from "@/lib/server/supabase"
 import { EMAIL_RE, splitEmails } from "@/lib/rows"
 
@@ -68,10 +68,9 @@ export async function POST(request: Request) {
     }
   }
 
-  const attachments: any[] = logoAttachments()
+  const attachments = logoAttachments()
   if (pdf) attachments.push({ filename: safeFilename(body.filename), content: pdf, contentType: "application/pdf" })
 
-  const from = senderAddress()
   const log = async (status: "sent" | "error", error: string | null) => {
     if (!body.log?.clientName) return
     // Sin la migración 12 la tabla no existe: el envío no depende del registro
@@ -91,23 +90,22 @@ export async function POST(request: Request) {
   }
 
   try {
-    const info = await transport.sendMail({
-      from: { name: senderName(), address: from },
+    const copy = user.email ?? replyToAddress()
+    const id = await transport.send({
       to,
-      cc: cc.length ? cc : undefined,
-      bcc: body.copyMe ? user.email ?? from : undefined,
-      replyTo: from,
+      cc,
+      bcc: body.copyMe && copy && !to.includes(copy) && !cc.includes(copy) ? [copy] : [],
       subject: body.subject.trim(),
       html: body.emailHtml,
       text: body.emailText,
       attachments,
     })
     await log("sent", null)
-    return NextResponse.json({ ok: true, to, messageId: info.messageId })
+    return NextResponse.json({ ok: true, to, messageId: id })
   } catch (e: any) {
-    console.error("[enviar] SMTP", e)
-    const message = smtpErrorMessage(e)
-    await log("error", message)
+    console.error(`[enviar] ${transport.provider}`, e)
+    const message = mailErrorMessage(e)
+    await log("error", `${message} (${String(e?.message ?? e).slice(0, 200)})`)
     return fail(message, 502)
   }
 }
