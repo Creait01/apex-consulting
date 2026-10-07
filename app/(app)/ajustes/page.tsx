@@ -11,7 +11,7 @@ import { dateFmt, rateFmt } from "@/lib/format"
 import type { Settings } from "@/lib/types"
 
 interface MailInfo {
-  provider: "resend" | "smtp" | null
+  provider: "gmail-supabase" | "gmail" | "resend" | "smtp" | null
   from: string | null
   replyTo: string | null
   resendKey: boolean
@@ -27,23 +27,25 @@ function MailStatus() {
       .then(setInfo)
       .catch(() => setInfo("error"))
   }, [])
-  const published = typeof window !== "undefined" && window.location.protocol === "https:"
 
   let tag: React.ReactNode = <span className="text-ink-2">Revisando…</span>
   let note: string | null = null
   if (info === "error") tag = <span className="tag-warn">Sin respuesta</span>
-  else if (info?.provider === "resend") {
+  else if (info?.provider === "gmail-supabase" || info?.provider === "gmail") {
+    tag = <span className="tag-ok">{info.provider === "gmail" ? "Gmail" : "Gmail · vía Supabase"}</span>
+    note = `Sale de ${info.from}; las respuestas te llegan ahí mismo.`
+  } else if (info?.provider === "resend") {
     tag = <span className="tag-ok">Resend</span>
     note =
       info.from === "onboarding@resend.dev"
         ? "Sin MAIL_FROM: Resend solo entrega a tu propio correo."
         : `Sale de ${info.from}; respuestas y copias a ${info.replyTo}.`
   } else if (info?.provider === "smtp") {
-    tag = published ? <span className="tag-late">Gmail SMTP · bloqueado</span> : <span className="tag-ok">Gmail SMTP</span>
-    note = published ? "Render no ve RESEND_API_KEY: agrégala en Environment y vuelve a desplegar." : null
+    tag = <span className="tag-ok">SMTP</span>
+    note = `Sale de ${info.from}.`
   } else if (info) {
     tag = <span className="tag-warn">Sin configurar</span>
-    note = "Falta RESEND_API_KEY (o GMAIL_USER y GMAIL_APP_PASSWORD) en el servidor."
+    note = "Faltan GMAIL_USER y GMAIL_APP_PASSWORD en las variables de entorno."
   }
 
   return (
@@ -52,7 +54,7 @@ function MailStatus() {
         <dt className="text-ink-2">Envío de correo</dt>
         <dd className="text-right">{tag}</dd>
       </div>
-      {note && <p className={`mt-1 text-right text-[12.5px] ${info && info !== "error" && info.provider === "resend" ? "text-ink-2" : "font-semibold text-amber"}`}>{note}</p>}
+      {note && <p className={`mt-1 text-right text-[12.5px] ${info && info !== "error" && info.provider ? "text-ink-2" : "font-semibold text-amber"}`}>{note}</p>}
     </div>
   )
 }
