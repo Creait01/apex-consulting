@@ -9,26 +9,37 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { getClient } from "@/lib/supabase/client"
 import { useAuth } from "@/hooks/useAuth"
 import { budgetTotal } from "@/lib/budget-math"
-import { entityKey } from "@/lib/entities"
 import { num, round2, today } from "@/lib/format"
+import {
+  BUDGET_COLUMNS,
+  BUDGET_COLUMNS_NEW,
+  CLIENT_COLUMNS,
+  CLIENT_COLUMNS_NEW,
+  SETTINGS_COLUMNS,
+  SETTINGS_COLUMNS_AUTO,
+  cleanContacts,
+  clientRecordFor,
+  toBudget,
+  toClientRecord,
+  toEmailLog,
+  toPayment,
+  toSettings,
+} from "@/lib/rows"
 import {
   DEFAULT_SETTINGS,
   type Budget,
   type AdvanceType,
   type BudgetItem,
   type BudgetStatus,
+  type ClientRecord,
+  type Contact,
   type Currency,
+  type EmailLogEntry,
   type Payment,
   type PaymentStatus,
   type Profile,
   type Settings,
 } from "@/lib/types"
-
-const BUDGET_COLUMNS =
-  "id,number,client_name,project_name,project_description,total,date,status,items,paid_amount,payment_status,created_at,updated_at"
-/** Columnas de la migración 11 (aprobación y anticipo) */
-const BUDGET_COLUMNS_NEW = BUDGET_COLUMNS + ",approved_on,advance_type,advance_value"
-const SETTINGS_COLUMNS = "id,company_name,payment_phone,payment_bank,payment_account,payment_id_number,contact_email,website,due_days"
 
 export interface BudgetInput {
   number: string
@@ -57,11 +68,9 @@ export interface PaymentInput {
 
 type Result<T = null> = { data: T | null; error: string | null }
 
-/** Fila de la tabla clients (existente): se usa para el correo de cada cliente */
-export interface ClientContact {
-  id: string
-  name: string
-  email: string
+export interface ClientPatch {
+  contacts?: Contact[]
+  auto_statement?: boolean
 }
 
 interface DataContext {
@@ -69,17 +78,24 @@ interface DataContext {
   payments: Payment[]
   settings: Settings
   profile: Profile | null
-  /** Correos de los clientes (tabla clients) */
-  contacts: ClientContact[]
-  /** Correo guardado para un cliente (se compara por nombre normalizado) */
-  emailFor: (clientName: string) => string
-  saveClientEmail: (clientName: string, email: string) => Promise<Result>
+  /** Fichas de clientes (tabla clients): correos de contacto y envío semanal */
+  clients: ClientRecord[]
+  /** Ficha de un cliente por nombre normalizado ("A2 CORPORACION C.A" = "A2 CORPORACION, C.A") */
+  clientFor: (clientName: string) => ClientRecord | null
+  /** Correos de contacto de un cliente: a todos les llegan presupuestos y estados de cuenta */
+  contactsFor: (clientName: string) => Contact[]
+  saveClient: (clientName: string, patch: ClientPatch) => Promise<Result>
+  /** Correos enviados (a mano, automáticos y pruebas), del más reciente al más viejo */
+  emailLog: EmailLogEntry[]
+  reloadEmailLog: () => Promise<void>
   loading: boolean
   /** true después de la primera carga completa (presupuestos, pagos y ajustes) */
   loaded: boolean
   error: string | null
   /** true cuando la base ya tiene las columnas de la migración 11 (cobros en Bs, datos del emisor) */
   schemaReady: boolean
+  /** true con la migración 12: varios contactos por cliente y estado de cuenta semanal */
+  autoReady: boolean
   reload: () => Promise<void>
   nextNumber: () => string
   createBudget: (input: BudgetInput) => Promise<Result<Budget>>
@@ -99,30 +115,6 @@ export const useData = () => {
   return ctx
 }
 
-function toBudget(row: any): Budget {
-  // Sin la migración 11 no hay aprobación: todo lo no cancelado cuenta como aprobado (como antes)
-  const legacy = !("approved_on" in row)
-  return {
-    ...row,
-    project_description: row.project_description ?? null,
-    total: num(row.total),
-    paid_amount: num(row.paid_amount),
-    items: Array.isArray(row.items) ? row.items : [],
-    approved_on: legacy ? (row.status === "cancelled" ? null : row.date) : row.approved_on ?? null,
-    advance_type: row.advance_type ?? null,
-    advance_value: row.advance_value == null ? null : num(row.advance_value),
-  }
-}
-
-function toPayment(row: any): Payment {
-  return {
-    ...row,
-    amount: num(row.amount),
-    amount_ves: row.amount_ves == null ? null : num(row.amount_ves),
-    exchange_rate: row.exchange_rate == null ? null : num(row.exchange_rate),
-  }
-}
-
 /** Estado coherente con el saldo; la app lo envía siempre, haya o no trigger en la base */
 function statusFor(total: number, paid: number, cancelled: boolean): { status: BudgetStatus; payment_status: PaymentStatus } {
   const payment_status: PaymentStatus = paid >= total - 0.005 && total > 0 ? "paid" : paid > 0.005 ? "partial" : "unpaid"
@@ -132,7 +124,7 @@ function statusFor(total: number, paid: number, cancelled: boolean): { status: B
 const message = (error: any, fallback: string) => {
   if (!error) return fallback
   if (error.code === "23505") return "Ya existe un presupuesto con ese número."
-  if (error.code === "42703") return "La base de datos todavía no tiene las columnas nuevas (falta aplicar la migración 11)."
+  if (error.code === "42703") return "La base de datos todavía no tiene las columnas nuevas (falta aplicar una migración)."
   return error.message || fallback
 }
 
@@ -142,11 +134,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [payments, setPayments] = useState<Payment[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [contacts, setContacts] = useState<ClientContact[]>([])
+  const [clients, setClients] = useState<ClientRecord[]>([])
+  const [emailLog, setEmailLog] = useState<EmailLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [schemaReady, setSchemaReady] = useState(false)
+  const [autoReady, setAutoReady] = useState(false)
 
   const loadBudgets = useCallback(async () => {
     if (!user) return
@@ -178,27 +172,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const loadSettings = useCallback(async () => {
     if (!user) return
     const supabase = getClient()
-    const full = await supabase.from("company_settings").select(SETTINGS_COLUMNS).eq("user_id", user.id).maybeSingle()
+    const query = (columns: string) => supabase.from("company_settings").select(columns).eq("user_id", user.id).maybeSingle()
+    // Con la migración 12 (envío semanal), si no con la 11, si no solo id y nombre
+    const auto = await query(SETTINGS_COLUMNS_AUTO)
+    const full = auto.error ? await query(SETTINGS_COLUMNS) : auto
     if (!full.error) {
       setSchemaReady(true)
-      const row: any = full.data ?? {}
-      setSettings({
-        id: row.id,
-        company_name: row.company_name ?? "",
-        payment_phone: row.payment_phone ?? DEFAULT_SETTINGS.payment_phone,
-        payment_bank: row.payment_bank ?? DEFAULT_SETTINGS.payment_bank,
-        payment_account: row.payment_account ?? DEFAULT_SETTINGS.payment_account,
-        payment_id_number: row.payment_id_number ?? DEFAULT_SETTINGS.payment_id_number,
-        contact_email: row.contact_email ?? DEFAULT_SETTINGS.contact_email,
-        website: row.website ?? DEFAULT_SETTINGS.website,
-        due_days: num(row.due_days) || DEFAULT_SETTINGS.due_days,
-      })
+      setAutoReady(!auto.error)
+      setSettings(toSettings(full.data))
       return
     }
-    // Base sin la migración 11: solo existen id y nombre
     setSchemaReady(false)
-    const basic = await supabase.from("company_settings").select("id,company_name").eq("user_id", user.id).maybeSingle()
-    setSettings({ ...DEFAULT_SETTINGS, id: basic.data?.id, company_name: basic.data?.company_name ?? "" })
+    setAutoReady(false)
+    const basic = await query("id,company_name")
+    const row: any = basic.data
+    setSettings({ ...DEFAULT_SETTINGS, id: row?.id, company_name: row?.company_name ?? "" })
   }, [user])
 
   const loadProfile = useCallback(async () => {
@@ -207,10 +195,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setProfile(data ?? null)
   }, [user])
 
-  const loadContacts = useCallback(async () => {
+  const loadClients = useCallback(async () => {
     if (!user) return
-    const { data } = await getClient().from("clients").select("id,name,email").eq("user_id", user.id)
-    setContacts((data ?? []) as ClientContact[])
+    const query = (columns: string) => getClient().from("clients").select(columns).eq("user_id", user.id)
+    let { data, error } = await query(CLIENT_COLUMNS_NEW)
+    if (error?.code === "42703") ({ data, error } = await query(CLIENT_COLUMNS))
+    setClients(((data ?? []) as any[]).map(toClientRecord))
+  }, [user])
+
+  const loadEmailLog = useCallback(async () => {
+    if (!user) return
+    // Sin la migración 12 la tabla no existe: queda vacío
+    const { data } = await getClient()
+      .from("email_log")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(300)
+    setEmailLog(((data ?? []) as any[]).map(toEmailLog))
   }, [user])
 
   const reload = useCallback(async () => {
@@ -218,41 +220,61 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoading(true)
     setError(null)
     try {
-      await Promise.all([loadBudgets(), loadPayments(), loadSettings(), loadProfile(), loadContacts()])
+      await Promise.all([loadBudgets(), loadPayments(), loadSettings(), loadProfile(), loadClients(), loadEmailLog()])
       setLoaded(true)
     } catch (e: any) {
       setError(message(e, "No se pudieron cargar los datos."))
     } finally {
       setLoading(false)
     }
-  }, [user, loadBudgets, loadPayments, loadSettings, loadProfile, loadContacts])
+  }, [user, loadBudgets, loadPayments, loadSettings, loadProfile, loadClients, loadEmailLog])
 
   useEffect(() => {
     if (user) reload()
   }, [user, reload])
 
-  const emailFor = useCallback(
-    (clientName: string) => {
-      const key = entityKey(clientName)
-      return contacts.find((c) => entityKey(c.name) === key && c.email)?.email ?? ""
-    },
-    [contacts],
-  )
+  /* El envío semanal lo procesa la app publicada: su dirección se registra sola
+     la primera vez que se abre por https (en localhost no se toca). */
+  useEffect(() => {
+    if (!user || !autoReady || !settings.id || typeof window === "undefined") return
+    const origin = window.location.origin
+    if (window.location.protocol !== "https:" || settings.app_url === origin) return
+    getClient()
+      .from("company_settings")
+      .update({ app_url: origin })
+      .eq("id", settings.id)
+      .eq("user_id", user.id)
+      .then(({ error }) => {
+        if (!error) setSettings((s) => ({ ...s, app_url: origin }))
+      })
+  }, [user, autoReady, settings.id, settings.app_url])
 
-  const saveClientEmail = useCallback<DataContext["saveClientEmail"]>(
-    async (clientName, email) => {
+  const clientFor = useCallback((clientName: string) => clientRecordFor(clients, clientName), [clients])
+  const contactsFor = useCallback((clientName: string) => clientRecordFor(clients, clientName)?.contacts ?? [], [clients])
+
+  const saveClient = useCallback<DataContext["saveClient"]>(
+    async (clientName, patch) => {
       if (!user) return { data: null, error: "Sin sesión." }
-      const key = entityKey(clientName)
-      const existing = contacts.find((c) => entityKey(c.name) === key)
+      const existing = clientRecordFor(clients, clientName)
+      const contacts = patch.contacts ? cleanContacts(patch.contacts) : existing?.contacts ?? []
+      if (!autoReady && (contacts.length > 1 || patch.auto_statement !== undefined)) {
+        return { data: null, error: "Para guardar varios correos falta aplicar la migración 12 en la base de datos." }
+      }
+      // clients.email (obligatoria) guarda el primer correo de la lista
+      const row: Record<string, unknown> = { email: contacts[0]?.email ?? "" }
+      if (autoReady) {
+        row.contacts = contacts
+        if (patch.auto_statement !== undefined) row.auto_statement = patch.auto_statement
+      }
       const supabase = getClient()
       const { error } = existing
-        ? await supabase.from("clients").update({ email: email.trim() }).eq("id", existing.id).eq("user_id", user.id)
-        : await supabase.from("clients").insert({ name: clientName.replace(/\s+/g, " ").trim(), email: email.trim(), user_id: user.id })
-      if (error) return { data: null, error: message(error, "No se pudo guardar el correo del cliente.") }
-      await loadContacts()
+        ? await supabase.from("clients").update(row).eq("id", existing.id).eq("user_id", user.id)
+        : await supabase.from("clients").insert({ ...row, name: clientName.replace(/\s+/g, " ").trim(), user_id: user.id })
+      if (error) return { data: null, error: message(error, "No se pudieron guardar los correos del cliente.") }
+      await loadClients()
       return { data: null, error: null }
     },
-    [user, contacts, loadContacts],
+    [user, clients, autoReady, loadClients],
   )
 
   const nextNumber = useCallback(() => {
@@ -397,7 +419,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (!schemaReady) {
         return { data: null, error: "Para guardar estos datos falta aplicar la migración 11 en la base de datos." }
       }
-      const payload = {
+      const payload: Record<string, unknown> = {
         company_name: next.company_name.trim() || "APEX CONSULTING",
         payment_phone: next.payment_phone.trim(),
         payment_bank: next.payment_bank.trim(),
@@ -407,6 +429,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         website: next.website.trim(),
         due_days: Math.max(1, Math.round(num(next.due_days)) || 7),
       }
+      if (autoReady) {
+        Object.assign(payload, {
+          statement_auto: next.statement_auto,
+          statement_weekday: Math.min(Math.max(Math.round(num(next.statement_weekday)), 0), 6),
+          statement_hour: Math.min(Math.max(Math.round(num(next.statement_hour)), 0), 23),
+          statement_scope: next.statement_scope === "open" ? "open" : "late",
+        })
+      }
       const supabase = getClient()
       const { error } = settings.id
         ? await supabase.from("company_settings").update(payload).eq("id", settings.id).eq("user_id", user.id)
@@ -415,7 +445,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await loadSettings()
       return { data: null, error: null }
     },
-    [user, schemaReady, settings.id, loadSettings],
+    [user, schemaReady, autoReady, settings.id, loadSettings],
   )
 
   const saveProfile = useCallback<DataContext["saveProfile"]>(
@@ -438,13 +468,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       payments,
       settings,
       profile,
-      contacts,
-      emailFor,
-      saveClientEmail,
+      clients,
+      clientFor,
+      contactsFor,
+      saveClient,
+      emailLog,
+      reloadEmailLog: loadEmailLog,
       loading,
       loaded,
       error,
       schemaReady,
+      autoReady,
       reload,
       nextNumber,
       createBudget,
@@ -460,13 +494,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       payments,
       settings,
       profile,
-      contacts,
-      emailFor,
-      saveClientEmail,
+      clients,
+      clientFor,
+      contactsFor,
+      saveClient,
+      emailLog,
+      loadEmailLog,
       loading,
       loaded,
       error,
       schemaReady,
+      autoReady,
       reload,
       nextNumber,
       createBudget,

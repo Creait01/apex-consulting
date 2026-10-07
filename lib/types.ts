@@ -66,7 +66,52 @@ export interface Settings {
   contact_email: string
   website: string
   due_days: number
+  /* Envío automático semanal del estado de cuenta (migración 12) */
+  statement_auto: boolean
+  /** 0 domingo … 6 sábado */
+  statement_weekday: number
+  /** Hora de Caracas, 0 a 23 */
+  statement_hour: number
+  statement_scope: StatementScope
+  /** Dirección pública de la app: desde ahí se procesa el envío automático */
+  app_url: string
 }
+
+/** A quién le llega el estado de cuenta semanal: solo con vencido o todos con saldo */
+export type StatementScope = "late" | "open"
+
+export interface Contact {
+  /** Opcional: "Administración", "Jean" */
+  name: string
+  email: string
+}
+
+/** Fila de la tabla clients: sus correos de contacto y si recibe el estado de cuenta semanal */
+export interface ClientRecord {
+  id: string
+  name: string
+  email: string
+  contacts: Contact[]
+  auto_statement: boolean
+}
+
+export interface EmailLogEntry {
+  id: string
+  run_id: string | null
+  kind: "statement" | "budget"
+  /** manual = desde la app · auto = envío semanal · test = prueba a uno mismo */
+  origin: "manual" | "auto" | "test"
+  client_name: string
+  budget_id: string | null
+  recipients: string[]
+  subject: string | null
+  amount: number | null
+  status: "sent" | "error"
+  error: string | null
+  created_at: string
+}
+
+export const WEEKDAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
 
 export interface Profile {
   id?: string
@@ -96,4 +141,9 @@ export const DEFAULT_SETTINGS: Settings = {
   contact_email: "edwin.dev.21114@gmail.com",
   website: "apexconsulting-it.site",
   due_days: 7,
+  statement_auto: false,
+  statement_weekday: 1,
+  statement_hour: 8,
+  statement_scope: "late",
+  app_url: "",
 }

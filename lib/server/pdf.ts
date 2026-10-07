@@ -19,7 +19,8 @@ function localChrome(): string | null {
   return LOCAL_CHROME.find((p) => fs.existsSync(p)) ?? null
 }
 
-export async function htmlToPdf(html: string): Promise<Buffer> {
+/** Un Chrome abierto para generar varios PDF seguidos (el envío semanal) */
+export async function openPdfRenderer() {
   const local = localChrome()
   const browser = await puppeteer.launch(
     local
@@ -31,15 +32,29 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
           defaultViewport: chromium.defaultViewport,
         },
   )
+  return {
+    async render(html: string): Promise<Buffer> {
+      const page = await browser.newPage()
+      try {
+        await page.setContent(html, { waitUntil: "networkidle0", timeout: 45_000 })
+        // Mona Sans viene de Google Fonts: esperar a que cargue antes de imprimir
+        await page.evaluate(() => document.fonts.ready)
+        await page.emulateMediaType("print")
+        const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true })
+        return Buffer.from(pdf)
+      } finally {
+        await page.close()
+      }
+    },
+    close: () => browser.close(),
+  }
+}
+
+export async function htmlToPdf(html: string): Promise<Buffer> {
+  const renderer = await openPdfRenderer()
   try {
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 45_000 })
-    // Mona Sans viene de Google Fonts: esperar a que cargue antes de imprimir
-    await page.evaluate(() => document.fonts.ready)
-    await page.emulateMediaType("print")
-    const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true })
-    return Buffer.from(pdf)
+    return await renderer.render(html)
   } finally {
-    await browser.close()
+    await renderer.close()
   }
 }

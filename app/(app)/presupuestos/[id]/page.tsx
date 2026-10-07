@@ -246,6 +246,7 @@ function BudgetView({ id }: { id: string }) {
               }),
             pdfHtml: html,
             filename: pdfName(`Presupuesto ${b.number}`, b.project_name),
+            log: { kind: "budget", budgetId: b.id, amount: b.total },
           }}
         />
       )}

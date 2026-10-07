@@ -6,11 +6,12 @@ import { useData } from "@/hooks/data"
 import { useAuth } from "@/hooks/useAuth"
 import { useRate } from "@/hooks/rate"
 import { Field, PageHeader, Panel, useToast } from "@/components/ui/kit"
+import { WeeklyPanel } from "@/components/settings/weekly-panel"
 import { dateFmt, rateFmt } from "@/lib/format"
 import type { Settings } from "@/lib/types"
 
 export default function AjustesPage() {
-  const { settings, profile, schemaReady, saveSettings, saveProfile } = useData()
+  const { settings, profile, schemaReady, autoReady, saveSettings, saveProfile } = useData()
   const { user, changePassword } = useAuth()
   const { rate, rateDate } = useRate()
   const toast = useToast()
@@ -33,7 +34,15 @@ export default function AjustesPage() {
     e.preventDefault()
     setSettingsError(null)
     setSavingSettings(true)
-    const { error } = await saveSettings(form)
+    // Este formulario solo edita los datos de los PDF: el envío semanal se guarda en su panel
+    const { error } = await saveSettings({
+      ...form,
+      statement_auto: settings.statement_auto,
+      statement_weekday: settings.statement_weekday,
+      statement_hour: settings.statement_hour,
+      statement_scope: settings.statement_scope,
+      app_url: settings.app_url,
+    })
     setSavingSettings(false)
     if (error) return setSettingsError(error)
     toast("Datos de los PDF guardados.")
@@ -65,6 +74,8 @@ export default function AjustesPage() {
       <PageHeader title="Ajustes" tail="del sistema." meta={user?.email} />
 
       <div className="grid gap-6 xl:grid-cols-12">
+        <WeeklyPanel className="xl:col-span-12" />
+
         <Panel className="xl:col-span-7" title="Datos que salen en los PDF" shadow>
           {!schemaReady && (
             <p className="mb-4 border-2 border-amber bg-amber-bg px-3 py-2.5 text-[13.5px] text-ink-2">
@@ -185,8 +196,9 @@ export default function AjustesPage() {
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-ink-2">Base de datos</dt>
-                <dd className="text-right">
+                <dd className="flex flex-wrap justify-end gap-1.5 text-right">
                   {schemaReady ? <span className="tag-ok">Migración 11 aplicada</span> : <span className="tag-warn">Falta la migración 11</span>}
+                  {autoReady ? <span className="tag-ok">Migración 12 aplicada</span> : <span className="tag-warn">Falta la migración 12</span>}
                 </dd>
               </div>
               <div className="border-t border-ink/15 pt-3 text-[13px] text-ink-2">

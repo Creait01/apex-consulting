@@ -24,7 +24,9 @@ import {
 import { printStatement } from "@/lib/report-actions"
 import { statementReport, type ChargeKind, type StatementInput, type StatementRow } from "@/lib/reports"
 import { defaultStatementMessage, pdfName, statementEmail } from "@/lib/emails"
+import { suggestedKind } from "@/lib/weekly"
 import { SendDialog } from "@/components/email/send-dialog"
+import { ContactsPanel } from "@/components/clients/contacts-panel"
 import { methodLabel, type Budget } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -41,7 +43,7 @@ interface Charge {
 
 export default function ClientePage({ params }: { params: { slug: string } }) {
   const key = slugKey(params.slug)
-  const { budgets, payments, settings, setBudgetApproved, schemaReady, emailFor } = useData()
+  const { budgets, payments, settings, setBudgetApproved, schemaReady, contactsFor } = useData()
   const { rate, rateDate } = useRate()
   const openPayment = usePaymentDialog()
   const toast = useToast()
@@ -55,11 +57,12 @@ export default function ClientePage({ params }: { params: { slug: string } }) {
   const ids = useMemo(() => new Set(all.map((b) => b.id)), [all])
   const own = useMemo(() => payments.filter((p) => ids.has(p.budget_id)), [payments, ids])
 
-  /* Por defecto: anticipo si el presupuesto lo tiene y falta pagarlo; si no, el
-     saldo. Vencido según el plazo. Todo se puede cambiar antes de imprimir. */
+  /* Por defecto lo mismo que el envío semanal: anticipo si el presupuesto lo
+     tiene y falta pagarlo; si no, el saldo. Vencido según el plazo. Todo se
+     puede cambiar antes de imprimir o enviar. */
   const defaults = (b: Budget): Charge => ({
     include: true,
-    kind: hasAdvance(b) && advanceDueOf(b) > EPS ? "anticipo" : "saldo",
+    kind: suggestedKind(b),
     pct: b.advance_type === "percent" ? Number(b.advance_value) : 50,
     amount: pendingOf(b),
     late: isLate(b, due, t),
@@ -142,7 +145,7 @@ export default function ClientePage({ params }: { params: { slug: string } }) {
     options: opts,
   }
   const print = () => printStatement(statement)
-  const clientEmail = emailFor(name)
+  const emails = contactsFor(name).map((c) => c.email)
 
   const approve = async (b: Budget) => {
     const { error } = await setBudgetApproved(b, true)
@@ -159,7 +162,14 @@ export default function ClientePage({ params }: { params: { slug: string } }) {
             {quotes.length > 0 && ` · ${plural(quotes.length, "por aprobar", "por aprobar")}`}
             {lastPayment ? ` · último pago el ${dateFmt(lastPayment)}` : ""}
             {" · "}
-            {clientEmail ? <span className="text-ink">{clientEmail}</span> : <span className="text-amber">sin correo guardado</span>}
+            {emails.length ? (
+              <span className="text-ink">
+                {emails[0]}
+                {emails.length > 1 && ` y ${plural(emails.length - 1, "correo más", "correos más")}`}
+              </span>
+            ) : (
+              <span className="text-amber">sin correo guardado</span>
+            )}
           </>
         }
         actions={
@@ -199,6 +209,8 @@ export default function ClientePage({ params }: { params: { slug: string } }) {
           sub={`cobrados de ${usd(active.reduce((s, b) => s + b.total, 0))} en ${plural(active.length, "presupuesto", "presupuestos")}`}
         />
       </div>
+
+      <ContactsPanel className="mt-6" clientName={name} />
 
       <Panel
         className="mt-6"
@@ -478,6 +490,7 @@ export default function ClientePage({ params }: { params: { slug: string } }) {
               }),
             pdfHtml: statementReport(statement),
             filename: pdfName("Estado de cuenta", name, t),
+            log: { kind: "statement", amount: lateTotal > EPS ? lateTotal : toPay },
           }}
         />
       )}
