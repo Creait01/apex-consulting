@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useData } from "@/hooks/data"
 import { useAuth } from "@/hooks/useAuth"
 import { useRate } from "@/hooks/rate"
@@ -9,6 +9,53 @@ import { Field, PageHeader, Panel, useToast } from "@/components/ui/kit"
 import { WeeklyPanel } from "@/components/settings/weekly-panel"
 import { dateFmt, rateFmt } from "@/lib/format"
 import type { Settings } from "@/lib/types"
+
+interface MailInfo {
+  provider: "resend" | "smtp" | null
+  from: string | null
+  replyTo: string | null
+  resendKey: boolean
+  mailFrom: boolean
+}
+
+/** Qué servicio de correo usa el servidor: confirma que las variables de Render se aplicaron */
+function MailStatus() {
+  const [info, setInfo] = useState<MailInfo | "error" | null>(null)
+  useEffect(() => {
+    fetch("/api/correo")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setInfo)
+      .catch(() => setInfo("error"))
+  }, [])
+  const published = typeof window !== "undefined" && window.location.protocol === "https:"
+
+  let tag: React.ReactNode = <span className="text-ink-2">Revisando…</span>
+  let note: string | null = null
+  if (info === "error") tag = <span className="tag-warn">Sin respuesta</span>
+  else if (info?.provider === "resend") {
+    tag = <span className="tag-ok">Resend</span>
+    note =
+      info.from === "onboarding@resend.dev"
+        ? "Sin MAIL_FROM: Resend solo entrega a tu propio correo."
+        : `Sale de ${info.from}; respuestas y copias a ${info.replyTo}.`
+  } else if (info?.provider === "smtp") {
+    tag = published ? <span className="tag-late">Gmail SMTP · bloqueado</span> : <span className="tag-ok">Gmail SMTP</span>
+    note = published ? "Render no ve RESEND_API_KEY: agrégala en Environment y vuelve a desplegar." : null
+  } else if (info) {
+    tag = <span className="tag-warn">Sin configurar</span>
+    note = "Falta RESEND_API_KEY (o GMAIL_USER y GMAIL_APP_PASSWORD) en el servidor."
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between gap-4">
+        <dt className="text-ink-2">Envío de correo</dt>
+        <dd className="text-right">{tag}</dd>
+      </div>
+      {note && <p className={`mt-1 text-right text-[12.5px] ${info && info !== "error" && info.provider === "resend" ? "text-ink-2" : "font-semibold text-amber"}`}>{note}</p>}
+    </div>
+  )
+}
 
 export default function AjustesPage() {
   const { settings, profile, schemaReady, autoReady, saveSettings, saveProfile } = useData()
@@ -194,6 +241,7 @@ export default function AjustesPage() {
                 <dt className="text-ink-2">Fuente de la tasa</dt>
                 <dd className="text-right">BCV, vía DolarApi (se actualiza cada 30 min)</dd>
               </div>
+              <MailStatus />
               <div className="flex justify-between gap-4">
                 <dt className="text-ink-2">Base de datos</dt>
                 <dd className="flex flex-wrap justify-end gap-1.5 text-right">
